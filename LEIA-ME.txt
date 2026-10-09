@@ -1,0 +1,75 @@
+POLIS HUB — app instalável (R01)
+
+ARQUIVOS DESTA PASTA (todos vão para o GitHub, sem renomear)
+  index.html             o aplicativo
+  manifest.webmanifest   nome, ícone e cores do app instalado
+  sw.js                  permite abrir o app sem internet e avisa quando há versão nova
+  icon-*.png             ícones
+
+Os DADOS não ficam nesta pasta nem no GitHub. Ficam numa pasta do servidor do
+escritório, que todas as pessoas escolhem dentro do app.
+
+PUBLICAR (uma vez só, igual ao controle financeiro)
+ 1. Em github.com (conta psoulepolis): "+" > "New repository". Nome: polis-hub.
+    Marque "Public". Create repository.
+ 2. Na página do repositório: "uploading an existing file". Arraste todos os arquivos
+    desta pasta (não a pasta em si). Clique em "Commit changes".
+ 3. Settings > Pages > em "Branch" escolha "main" e "/ (root)" > Save.
+ 4. Espere 1 a 2 minutos. O endereço será:
+    https://psoulepolis.github.io/polis-hub/
+
+PREPARAR A PASTA DE DADOS (uma vez só)
+ 5. No servidor, crie uma pasta vazia só para o Polis Hub. Ex.: \\SERVIDOR\Polis\Polis Hub
+    Todas as pessoas precisam ter permissão de leitura e gravação nela.
+
+PRIMEIRO USO — VOCÊ
+ 6. Abra o endereço no Chrome ou no Edge e instale como app:
+    Chrome: ícone de instalar na barra de endereço (ou menu ⋮ > Transmitir, salvar e compartilhar > Instalar página como app).
+    Edge: menu … > Aplicativos > Instalar este site como um aplicativo.
+    Fixe o ícone na barra de tarefas.
+ 7. No app: "Escolher pasta de dados" > selecione a pasta do passo 5 > "Permitir".
+    Nome do caminho: "Escritório (rede)".
+ 8. Na "Configuração inicial", crie o seu usuário (você é o coordenador).
+    Disciplinas (com os códigos AGU, ESG, DRE…), tipos de projeto e modelos de tarefa já vêm cadastrados.
+ 9. Aba Usuários > "+ Cadastrar usuário": cadastre a Larissa como Coordenador e as meninas
+    como Colaborador, cada uma com uma senha inicial. Ajuste os dias e horas de trabalho.
+10. Aba Cadastros: clientes (com a cor de cada um) e empreendimentos (com a sigla).
+
+PRIMEIRO USO — CADA PESSOA DA EQUIPE (no computador dela)
+11. Abrir o mesmo endereço, instalar como app (passo 6).
+12. "Escolher pasta de dados" > a MESMA pasta do passo 5 > "Permitir".
+13. Entrar com o e-mail e a senha inicial. Cada um pode trocar em "Minha senha".
+    Quem não foi cadastrado pode clicar em "Pedir acesso à coordenação"; o pedido aparece
+    na aba Usuários para você ou a Larissa autorizarem.
+
+DE CASA (você e a Larissa)
+14. No notebook de casa: com o RaiDrive conectado, abra o app > botão "Pasta de dados" no topo >
+    "+ Adicionar caminho" > escolha a mesma pasta do Polis Hub vista pelo RaiDrive.
+    Nome: "Fora do escritório (RaiDrive)". O app usa o primeiro caminho que responder.
+    Se for o mesmo notebook do escritório, os dois caminhos ficam cadastrados e ele troca sozinho.
+    Sem acesso a nenhum caminho, as alterações ficam guardadas no computador e são gravadas
+    na pasta sozinhas quando ela voltar (o app tenta a cada 15 s).
+
+COMO OS DADOS FICAM NA PASTA
+  polis-hub.json        identifica a pasta do Polis Hub (não apague)
+  alteracoes\           um arquivo por computador; cada computador só grava no seu,
+                        por isso ninguém sobrescreve o que o outro salvou
+  base.json             tudo consolidado; um coordenador refaz uma vez por dia, sozinho
+  backups\              uma cópia completa por dia, com os últimos 60 dias
+  As telas se atualizam sozinhas a cada 15 segundos.
+  Não edite nem apague esses arquivos à mão.
+
+PERMISSÕES
+  Coordenador: tudo (projetos, tarefas, conferência, indicadores, cadastros, usuários).
+  Colaborador: só as próprias tarefas — registra andamento e envia para conferência.
+  O app ignora qualquer alteração que um colaborador não tenha permissão para fazer.
+
+ATUALIZAR PARA UMA VERSÃO NOVA
+  No repositório: "Add file" > "Upload files", arraste os arquivos novos (substituem os antigos),
+  "Commit changes". Ao abrir o app, aparece "Nova versão do Polis Hub disponível · Atualizar agora".
+
+SE ALGO DER ERRADO
+  "Clique para reconectar a pasta" no topo: o navegador pede confirmação de novo; clique e Permitir.
+  "Sem acesso à pasta": o computador não está vendo o servidor (rede ou RaiDrive). Pode continuar
+  usando; grava quando voltar.
+  Esqueceu a senha: o coordenador clica em "Redefinir" na aba Usuários.
