@@ -506,6 +506,8 @@ function setSync(){
   if(FS.status==='ok'){if(FS.writing||MYDIRTY){t='Salvando…';cls+=' saving'}else t=(FS.lastSave?'Salvo · '+new Date(FS.lastSave).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'Conectado')+(FS.locs.length>1&&ln?' · '+ln:'')}
   else if(FS.status==='ask'){t='Clique para reconectar a pasta';cls+=' off act';act=true}
   else if(FS.status==='offline'){t=MYDIRTY?'Sem acesso à pasta · alterações guardadas neste computador':'Sem acesso à pasta';cls+=' off act';act=true}
+  const lf=document.getElementById('loginFolder');
+  if(lf){const ok=FS.status==='ok';lf.innerHTML='<span style="color:'+(ok?'var(--ok)':'var(--bad)')+'">●</span> '+(ok?'Pasta de dados conectada'+(ln?' · '+esc(ln):''):FS.status==='ask'?'<b>Pasta de dados precisa ser reconectada.</b> Clique em “Pasta de dados” → Reconectar.':'<b>Sem acesso à pasta de dados.</b> Confira a rede ou o RaiDrive, ou adicione outro caminho em “Pasta de dados”.')}
   el.className=cls;el.textContent=t;el.title=act?'Clique para tentar reconectar':(ln?'Pasta de dados: '+ln:'');
   el.onclick=act?async()=>{await fsConnect(true);if(FS.status==='ok'){toast('Pasta reconectada');poll()}}:null;
 }
@@ -1285,11 +1287,14 @@ async function fsAddLoc(first,fromGate){
 function showLogin(msg){
   authCard('<h3>Entrar</h3>'+(msg?'<p class="small" style="color:var(--bad);margin:4px 0 0">'+esc(msg)+'</p>':'')+
     '<form id="fAuth"><div class="f"><label for="aE">E-mail</label><input id="aE" type="email" autocomplete="username" required></div><div class="f"><label for="aS">Senha</label><input id="aS" type="password" autocomplete="current-password" required></div><button class="btn primary" type="submit">Entrar</button></form>'+
-    '<p class="small muted" style="margin:16px 0 0">Primeiro acesso? <a href="#" id="aReg">Pedir acesso à coordenação</a></p>');
+    '<p class="small muted" style="margin:16px 0 0">Primeiro acesso? <a href="#" id="aReg">Pedir acesso à coordenação</a></p>'+
+    '<div class="loginfolder" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span id="loginFolder" class="small" style="flex:1;min-width:180px"></span><button class="btn sm" type="button" id="aPasta">Pasta de dados</button></div>');
+  document.getElementById('aPasta').onclick=openPasta;setSync();
   document.getElementById('fAuth').onsubmit=async e=>{e.preventDefault();
     const em=document.getElementById('aE').value.trim().toLowerCase(),pw=document.getElementById('aS').value;
+    if(FS.status==='ok'){try{await refresh(false)}catch(x){}}
     const u=DATA.users.find(x=>(x.email||'').toLowerCase()===em);
-    if(!u||!(await checkPw(pw,u.hash))){toast('E-mail ou senha incorretos');return}
+    if(!u||!(await checkPw(pw,u.hash))){toast(FS.status==='ok'?'E-mail ou senha incorretos':'E-mail ou senha incorretos. Atenção: este computador está sem acesso à pasta de dados, então uma senha trocada ou redefinida ainda não chegou aqui. Conecte a pasta e tente de novo.');return}
     if(u.status==='pendente'){toast('Seu acesso ainda não foi autorizado pela coordenação');return}
     if(u.status!=='ativo'){toast('Seu acesso está desativado. Fale com a coordenação.');return}
     setSess(u);enter(u.id)};
@@ -1347,11 +1352,11 @@ function openPasta(){
   f.innerHTML='<div class="dlg-h"><div><div class="ctx">Neste computador</div><h2>Pasta de dados</h2></div><button class="btn x" value="cancel" aria-label="Fechar">✕</button></div><div class="dlg-b">'+
     '<p class="small muted" style="margin:0">Caminhos para a mesma pasta do Polis Hub, testados em ordem. Por exemplo: “Escritório (rede)” e “Fora do escritório (RaiDrive)”.</p>'+
     '<div class="tblwrap"><table><tbody>'+FS.locs.map((l,i)=>'<tr><td><b>'+esc(l.nome)+'</b><br><span class="small muted">pasta “'+esc(l.h.name)+'”'+(FS.cur===i?' · em uso agora':'')+'</span></td><td class="small">'+(st[FS.locStatus[l.id]]||'—')+'</td><td><div class="actions" style="justify-content:flex-end">'+(i>0?'<button class="btn sm" type="button" data-up="'+i+'">Subir</button>':'')+(FS.locs.length>1?'<button class="btn sm danger" type="button" data-rm="'+l.id+'">Remover</button>':'')+'</div></td></tr>').join('')+'</tbody></table></div>'+
-    '<div class="actions"><button class="btn" type="button" id="lAdd">+ Adicionar caminho</button><button class="btn" type="button" id="lRe">Reconectar</button>'+(isCoord()?'<button class="btn" type="button" id="lBk">Baixar backup agora</button>':'')+'</div>'+
+    '<div class="actions"><button class="btn" type="button" id="lAdd">+ Adicionar caminho</button><button class="btn" type="button" id="lRe">Reconectar</button>'+(S.me&&isCoord()?'<button class="btn" type="button" id="lBk">Baixar backup agora</button>':'')+'</div>'+
     '<p class="small muted" style="margin:0">Backups automáticos: uma cópia por dia na subpasta <b>backups</b> da pasta de dados, com os últimos 60 dias.</p></div>';
   const re=()=>{d.close();openPasta()};
-  f.querySelector('#lAdd').onclick=async()=>{await fsAddLoc(false);re()};
-  f.querySelector('#lRe').onclick=async()=>{await fsConnect(true);if(FS.status==='ok')poll();re()};
+  f.querySelector('#lAdd').onclick=async()=>{await fsAddLoc(false);if(FS.status==='ok')await poll();re()};
+  f.querySelector('#lRe').onclick=async()=>{await fsConnect(true);if(FS.status==='ok'){await poll();toast('Pasta conectada')}else toast(FS.status==='ask'?'A permissão não foi concedida':'A pasta não respondeu por nenhum caminho');re()};
   const bk=f.querySelector('#lBk');if(bk)bk.onclick=exportBackup;
   f.querySelectorAll('[data-up]').forEach(b=>b.onclick=async()=>{const i=+b.dataset.up,a=FS.locs;[a[i-1],a[i]]=[a[i],a[i-1]];await idb.set('locs',a);FS.cur=-1;await fsConnect(false);re()});
   f.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{if(!confirm('Remover este caminho? Os dados não são apagados; este computador só deixa de usar esse caminho.'))return;
