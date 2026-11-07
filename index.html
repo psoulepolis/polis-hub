@@ -203,6 +203,7 @@ svg text{font-family:var(--f-mono);font-size:10px}
 
 /* diálogo */
 dialog{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--fg);padding:0;width:min(760px,calc(100vw - 20px));max-height:calc(100vh - 30px)}
+dialog.wide{width:min(1080px,calc(100vw - 20px))}
 dialog.narrow{width:min(440px,calc(100vw - 20px))}
 dialog::backdrop{background:rgba(10,20,20,.5)}
 dialog form{display:flex;flex-direction:column;max-height:calc(100vh - 32px)}
@@ -234,6 +235,8 @@ dialog form{display:flex;flex-direction:column;max-height:calc(100vh - 32px)}
 .hist li.k-devolucao{border-left-color:var(--s-devolvida)} .hist li.k-aprovacao{border-left-color:var(--s-concluida)} .hist li.k-andamento{border-left-color:var(--accent)} .hist li.k-resp{border-left-color:var(--p2)}
 .hist time{font-family:var(--f-mono);font-size:11px;color:var(--muted);margin-right:6px}
 .hist .tx{display:block;color:var(--muted);white-space:pre-wrap}
+.dchips{display:flex;flex-wrap:wrap;gap:6px}.dchips label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:4px 11px;cursor:pointer;font-size:13px;position:relative}.dchips label:has(input:checked){background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}.dchips input{position:absolute;opacity:0;width:1px;height:1px}.dchips label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+tr.hl td{background:var(--accent-soft)}
 .checklist{display:flex;flex-direction:column;gap:4px;max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:8px}
 .checklist label{display:flex;gap:8px;align-items:center;font-size:13px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:6px;font-weight:600;z-index:99}
@@ -249,15 +252,15 @@ button.sync{border:none;background:none;padding:0;color:var(--muted)}.sync{font-
 <body>
 
 <header class="top">
-  <div class="brand"><span class="logo" role="img" aria-label="Polis Hub"></span><small>Organização de trabalho · versão R03</small></div>
+  <div class="brand"><span class="logo" role="img" aria-label="Polis Hub"></span><small>Organização de trabalho · versão R05</small></div>
   <div class="who" id="whoBox" hidden><button class="sync" id="syncTag" type="button" aria-live="polite"></button><span class="role" id="roleTag"></span><b id="whoName" style="color:var(--fg)"></b><button class="btn sm" id="btnPasta" type="button">Pasta de dados</button><button class="btn sm" id="btnSenha" type="button">Minha senha</button><button class="btn sm" id="btnSair" type="button">Sair</button></div>
 </header>
 <nav class="tabs" role="tablist" id="tabs"></nav>
 
 <main id="main"></main>
 
-<dialog id="dlg"><form method="dialog" id="dlgForm"></form></dialog>
-<dialog id="dlg2" class="narrow"><form method="dialog" id="dlg2Form"></form></dialog>
+<dialog id="dlg"><form method="dialog" id="dlgForm" novalidate></form></dialog>
+<dialog id="dlg2" class="narrow"><form method="dialog" id="dlg2Form" novalidate></form></dialog>
 
 <script>
 (function(){
@@ -265,7 +268,7 @@ button.sync{border:none;background:none;padding:0;color:var(--muted)}.sync{font-
 const SIT_T={pendente:'Pendente',andamento:'Em execução',devolvida:'Devolvida',conferencia:'Aguardando conferência',concluida:'Concluída'};
 const SIT_SHORT={pendente:'Pend.',andamento:'Exec.',devolvida:'Devolv.',conferencia:'Confer.',concluida:'Concl.'};
 const SIT_T_ORD=['pendente','andamento','devolvida','conferencia','concluida'];
-const SIT_P={aguardando:'Aguardando prazo',andamento:'Em andamento',parado:'Parado',finalizado:'Finalizado'};
+const SIT_D={andamento:'Em andamento',parado:'Parado',finalizado:'Finalizado'};
 const PRIO={1:'Urgente',2:'Alta',3:'Normal',4:'Baixa'};
 const WD=['D','S','T','Q','Q','S','S'];
 const WDL=['dom','seg','ter','qua','qui','sex','sáb'];
@@ -298,9 +301,9 @@ function latestStart(prazo,n,days){let d=parse(prazo),c=0,g=0;if(!days.length)da
 /* Cada computador grava só o seu arquivo em alteracoes/<computador>.json.
    O app lê os arquivos de todos e junta as alterações por ordem de horário.
    Uma vez por dia, um coordenador consolida tudo em base.json e grava um backup. */
-let S={me:'',users:[],clientes:[],emps:[],discs:[],tipos:[],modelos:[],projetos:[],tarefas:[]};
+let S={me:'',users:[],clientes:[],emps:[],categorias:[],discs:[],tipos:[],modelos:[],projetos:[],pdiscs:[],tarefas:[]};
 const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-const COLS=['users','clientes','emps','discs','tipos','modelos','projetos','tarefas'];
+const COLS=['users','clientes','emps','categorias','discs','tipos','modelos','projetos','pdiscs','tarefas'];
 const COLAB_SIT={pendente:['pendente','andamento'],devolvida:['devolvida','andamento'],andamento:['andamento','conferencia'],conferencia:['conferencia'],concluida:['concluida']};
 const COLAB_TASK_KEYS=['onde','pend','iniReal','fimExec','sit','atualEm','atualPor'];
 const emptyData=()=>{const d={};COLS.forEach(c=>d[c]=[]);return d};
@@ -361,14 +364,39 @@ function rebuild(){
   const deleted=new Set();
   for(const e of evs){try{if(allowed(e,idx))applyEv(e,idx,deleted)}catch(x){}}
   COLS.forEach(c=>d[c]=[...idx[c].values()]);
+  normalize(d);
   DATA=d;
+}
+// ---- projeto → disciplinas: compatibilidade com dados do modelo antigo (uma disciplina por projeto)
+const LEGACY_P=['disc','codigo','nome','ini','fim','est','sit','motivo','resp'];
+const DEF_CATS=['Loteamento','Condomínio de Lotes','Condomínio de Prédios'];
+let migrating=false;
+function normalize(d){
+  if(!d.categorias.length)d.categorias=DEF_CATS.map((nome,i)=>({id:'cat'+(i+1),nome,_syn:1}));
+  const have=new Set(d.pdiscs.map(x=>x.id));
+  d.projetos.forEach(p=>{if(p.disc&&!have.has('pd'+p.id)){d.pdiscs.push({id:'pd'+p.id,proj:p.id,disc:p.disc,codigo:p.codigo||'',tipo:'',resp:p.resp||'',prazo:p.fim||'',est:p.est||'',sit:(p.sit==='parado'||p.sit==='finalizado')?p.sit:'andamento',motivo:p.motivo||'',hist:[],_syn:1});have.add('pd'+p.id)}});
+  const first={};d.pdiscs.forEach(x=>{if(!first[x.proj])first[x.proj]=x.id});
+  d.tarefas.forEach(t=>{if(!t.pd&&t.proj){const id=have.has('pd'+t.proj)?'pd'+t.proj:first[t.proj];if(id){t.pd=id;t._synpd=1}}});
+}
+async function migrate(){
+  if(!S.me||!isCoord()||FS.status!=='ok'||migrating)return false;
+  const evs=[];const same=(a,b)=>stripAc(a||'').trim().toLowerCase()===stripAc(b||'').trim().toLowerCase();
+  DATA.categorias.filter(c=>c._syn).forEach(c=>evs.push({c:'categorias',id:c.id,op:'put',set:{nome:c.nome}}));
+  DATA.pdiscs.filter(x=>x._syn).forEach(x=>{const set={};for(const k in x)if(k!=='id'&&k[0]!=='_')set[k]=x[k];evs.push({c:'pdiscs',id:x.id,op:'put',set})});
+  DATA.tarefas.filter(t=>t._synpd).forEach(t=>evs.push({c:'tarefas',id:t.id,op:'put',set:{pd:t.pd}}));
+  DATA.projetos.filter(p=>LEGACY_P.some(k=>k in p)).forEach(p=>{const set={},nm=(p.nome||'').trim();
+    if(!p.cat&&nm){const c=DATA.categorias.find(c=>same(c.nome,nm));if(c)set.cat=c.id;else if(!DATA.discs.some(x=>same(x.nome,nm)))set.obs='Nome anterior: '+nm+(p.obs?'\n'+p.obs:'')}
+    evs.push({c:'projetos',id:p.id,op:'put',set,unset:LEGACY_P.filter(k=>k in p)})});
+  if(!evs.length)return false;
+  migrating=true;try{await emit(evs,S.me);buildView()}finally{migrating=false}
+  return true;
 }
 function snapAll(){SNAP={};COLS.forEach(c=>{SNAP[c]={};S[c].forEach(r=>SNAP[c][r.id]=jstr(r))})}
 function clearView(){S.me='';COLS.forEach(c=>S[c]=[]);snapAll()}
 function buildView(){
   const u=DATA.users.find(x=>x.id===S.me);const coord=u&&u.perfil==='coord'&&u.status==='ativo';
   const v={};COLS.forEach(c=>v[c]=DATA[c]);
-  if(!coord){v.tarefas=DATA.tarefas.filter(t=>t.resp===S.me);const ps=new Set(v.tarefas.map(t=>t.proj));v.projetos=DATA.projetos.filter(p=>ps.has(p.id));v.users=DATA.users.filter(x=>x.status==='ativo')}
+  if(!coord){v.tarefas=DATA.tarefas.filter(t=>t.resp===S.me);const ps=new Set(v.tarefas.map(t=>t.proj)),pds=new Set(v.tarefas.map(t=>t.pd));v.projetos=DATA.projetos.filter(p=>ps.has(p.id));v.pdiscs=DATA.pdiscs.filter(x=>pds.has(x.id));v.users=DATA.users.filter(x=>x.status==='ativo')}
   COLS.forEach(c=>S[c]=JSON.parse(JSON.stringify(v[c])));
   S.users.forEach(x=>delete x.hash);
   snapAll();
@@ -528,7 +556,7 @@ async function poll(){
   maintenance();
   if(pendingRender&&!dialogOpen()&&!focusedInput()){pendingRender=false;
     if(!userStillValid())return logout('Seu acesso foi alterado. Entre de novo.');
-    buildView();render()}
+    buildView();render();if(isCoord())migrate().then(m=>{if(m&&!dialogOpen())render()})}
 }
 setInterval(poll,15000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll()});
@@ -550,14 +578,23 @@ const ativos=()=>S.users.filter(u=>u.status==='ativo');
 const uname=id=>U(id)?.nome||'—';
 const ini2=n=>(n||'?').split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase();
 const cliVar=id=>{const c=CL(id);return 'var(--d'+((c&&c.cor!=null?c.cor:0)%8+1)+')'};
-function projCode(emp,disc,selfId){const e=EM(emp),d=DI(disc);if(!d)return '';const base=(e&&e.sigla?e.sigla+'-':'')+(d.sigla||sugSigla(d.nome));
-  let c=base,n=1;while(S.projetos.some(p=>p.id!==selfId&&p.codigo===c))c=base+'-'+(++n);return c}
+function pdCode(emp,disc,selfId){const e=EM(emp),d=DI(disc);if(!d)return '';const base=(e&&e.sigla?e.sigla+'-':'')+(d.sigla||sugSigla(d.nome));
+  let c=base,n=1;while(S.pdiscs.some(x=>x.id!==selfId&&x.codigo===c))c=base+'-'+(++n);return c}
 const prioVar=p=>'var(--p'+p+')';
 const sitVar=s=>'var(--s-'+s+')';
 const daysOf=id=>U(id)?.dias?.length?U(id).dias:DEF_DAYS;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const opts=(list,val,blank)=>(blank!==undefined?'<option value="">'+esc(blank)+'</option>':'')+list.map(([v,l])=>'<option value="'+esc(v)+'"'+(String(v)===String(val)?' selected':'')+'>'+esc(l)+'</option>').join('');
-const projLabel=p=>p?(p.codigo?p.codigo+' · ':'')+p.nome:'—';
+const PDx=id=>byId(S.pdiscs,id);
+const CAT=id=>byId(S.categorias,id);
+const projLabel=p=>p?(EM(p.emp)?.nome||'—')+(CAT(p.cat)?' · '+CAT(p.cat).nome:''):'—';
+const pdLabel=x=>x?(x.codigo?x.codigo+' · ':'')+(DI(x.disc)?.nome||''):'—';
+const tPD=t=>PDx(t.pd);
+const tLabel=t=>{const x=tPD(t),p=PR(t.proj);return (x?x.codigo+' · ':'')+(EM(p?.emp)?.nome||'')};
+const pdTipo=x=>TI((x&&x.tipo)||PR(x?.proj)?.tipo);
+const pdTasks=id=>S.tarefas.filter(t=>t.pd===id);
+const projPds=pid=>S.pdiscs.filter(x=>x.proj===pid).sort((a,b)=>(a.codigo||'').localeCompare(b.codigo||''));
+const pdVencido=x=>x.sit!=='finalizado'&&x.prazo&&x.prazo<TODAY;
 const sortT=(a,b)=>(a.prio-b.prio)||((a.fim||'9')<(b.fim||'9')?-1:(a.fim||'9')>(b.fim||'9')?1:0);
 const openSit=s=>s==='pendente'||s==='andamento'||s==='devolvida';
 function tRange(t){const s=t.iniReal||t.ini;if(!s)return null;let e;
@@ -565,7 +602,6 @@ function tRange(t){const s=t.iniReal||t.ini;if(!s)return null;let e;
   if(!e||e<s)e=s;return [s,e]}
 const tVencida=t=>openSit(t.sit)&&t.fim&&t.fim<TODAY;
 const tForaPrazo=t=>(t.fimExec&&t.fimBase&&t.fimExec>t.fimBase);
-const pVencido=p=>p.sit!=='finalizado'&&p.fim&&p.fim<TODAY;
 function sitPill(s){return '<span class="chip-s" style="color:'+sitVar(s)+'"><i class="dot" style="background:'+sitVar(s)+'"></i>'+SIT_T[s]+'</span>'}
 function prioPill(p){return '<span class="pill" style="color:'+prioVar(p)+'">'+PRIO[p]+'</span>'}
 function log(o,k,txt,det){o.hist.push({ts:nowStamp(),u:S.me,k,txt,det:det||''})}
@@ -616,7 +652,7 @@ function renderPainel(el){
   if(PAINEL.view==='projetos'&&coord)bindProjDrag(el);
 }
 function taskCard(t,showWho){
-  const p=PR(t.proj),e=p&&EM(p.emp);const venc=tVencida(t);const mine=t.resp===S.me;
+  const p=PR(t.proj),x=tPD(t);const venc=tVencida(t);const mine=t.resp===S.me;
   let acts='';
   if(mine&&(t.sit==='pendente'))acts='<button class="btn sm primary" data-act="start" data-id="'+t.id+'">Iniciar</button>';
   if(mine&&t.sit==='devolvida')acts='<button class="btn sm primary" data-act="start" data-id="'+t.id+'">Retomar</button>';
@@ -624,9 +660,9 @@ function taskCard(t,showWho){
   if(isCoord()&&t.sit==='conferencia')acts='<button class="btn sm conf" data-open="'+t.id+'">Conferir</button>';
   const lastDev=t.sit==='devolvida'?[...t.hist].reverse().find(x=>x.k==='devolucao'):null;
   return '<div class="kcard" tabindex="0" role="button" data-open="'+t.id+'" style="--edge:'+prioVar(t.prio)+'">'+
-    '<div class="r"><span class="sw" style="background:'+cliVar(p?.cli)+'" title="'+esc(CL(p?.cli)?.nome)+'"></span><span class="small mono muted" style="margin-right:auto">'+esc(p?.codigo||'')+' · '+esc(DI(p?.disc)?.nome||'')+'</span>'+prioPill(t.prio)+'</div>'+
+    '<div class="r"><span class="sw" style="background:'+cliVar(p?.cli)+'" title="'+esc(CL(p?.cli)?.nome)+'"></span><span class="small mono muted" style="margin-right:auto">'+esc(x?.codigo||'')+' · '+esc(DI(x?.disc)?.nome||'')+'</span>'+prioPill(t.prio)+'</div>'+
     '<div class="t">'+esc(t.titulo)+'</div>'+
-    '<div class="m">'+esc(e?.nome||'')+' · '+esc(CL(p?.cli)?.nome||'')+'</div>'+
+    '<div class="m">'+esc(projLabel(p))+' · '+esc(CL(p?.cli)?.nome||'')+'</div>'+
     (lastDev?'<div class="q" style="border-left-color:var(--s-devolvida);color:var(--s-devolvida)">'+esc(lastDev.det)+'</div>':t.onde&&t.sit!=='concluida'?'<div class="q">'+esc(t.onde)+'</div>':'')+
     '<div class="r"><span class="mono small'+(venc?'" style="color:var(--bad);font-weight:600':'')+'">'+(t.fim?'até '+br(t.fim):'sem data')+(venc?' · vencida':'')+'</span>'+(showWho?'<span class="small"><b>'+esc(uname(t.resp))+'</b></span>':'')+(showWho?'':sitPill(t.sit))+'</div>'+
     (acts?'<div class="acts">'+acts+'</div>':'')+'</div>';
@@ -643,29 +679,29 @@ function taskKanban(){
     return '<section class="kcol"><h4><i class="dot" style="background:'+sitVar(s)+'"></i>'+l+'<span class="c">'+L.length+'</span></h4>'+
       (L.length?L.map(t=>taskCard(t,quem!=='eu')).join(''):'<p class="small muted" style="margin:4px">Nada aqui.</p>')+'</section>'}).join('')+'</div></div>';
 }
-function projCard(p){
-  const ts=projTasks(p.id),done=ts.filter(t=>t.sit==='concluida').length,conf=ts.filter(t=>t.sit==='conferencia').length;
+function pdCard(x){
+  const p=PR(x.proj);const ts=pdTasks(x.id),done=ts.filter(t=>t.sit==='concluida').length,conf=ts.filter(t=>t.sit==='conferencia').length;
   let extra='';
-  if(p.sit==='aguardando'&&p.fim&&p.est){const ls=latestStart(p.fim,+p.est,daysOf(p.resp));const fol=wdBetween(TODAY,ls,daysOf(p.resp))-1;
-    extra='<div class="r"><span class="small">Começar até <b class="mono">'+br(ls)+'</b></span>'+(ls<TODAY?'<span class="pill bad">atrasado p/ começar</span>':fol<=5?'<span class="pill warn">folga '+Math.max(fol,0)+' d.u.</span>':'<span class="pill ok">folga '+fol+' d.u.</span>')+'</div>'}
-  if(p.sit==='parado'&&p.motivo)extra='<div class="q" style="border-left-color:var(--warn)">'+esc(p.motivo)+'</div>';
-  return '<div class="kcard" tabindex="0" role="button" draggable="true" data-proj="'+p.id+'" style="--edge:'+cliVar(p.cli)+'">'+
-    '<div class="r"><span class="small mono muted">'+esc(p.codigo)+'</span><span class="small">'+esc(DI(p.disc)?.nome||'')+' · '+esc(TI(p.tipo)?.nome||'')+'</span></div>'+
-    '<div class="t">'+esc(p.nome)+'</div><div class="m">'+esc(EM(p.emp)?.nome||'')+' · '+esc(CL(p.cli)?.nome||'')+'</div>'+
-    '<div class="r"><span class="small">Resp.: <b>'+esc(uname(p.resp))+'</b></span><span class="mono small'+(pVencido(p)?'" style="color:var(--bad);font-weight:600':'')+'">'+(p.fim?'entrega '+br(p.fim):'sem prazo')+'</span></div>'+
+  if(x.sit==='andamento'&&x.prazo&&x.est&&!ts.some(t=>t.iniReal)){const ls=latestStart(x.prazo,+x.est,daysOf(x.resp));const fol=wdBetween(TODAY,ls,daysOf(x.resp))-1;
+    extra='<div class="r"><span class="small">Começar até <b class="mono">'+br(ls)+'</b></span>'+(ls<TODAY?'<span class="pill bad">atrasada p/ começar</span>':fol<=5?'<span class="pill warn">folga '+Math.max(fol,0)+' d.u.</span>':'<span class="pill ok">folga '+fol+' d.u.</span>')+'</div>'}
+  if(x.sit==='parado'&&x.motivo)extra='<div class="q" style="border-left-color:var(--warn)">'+esc(x.motivo)+'</div>';
+  return '<div class="kcard" tabindex="0" role="button" draggable="true" data-pd="'+x.id+'" style="--edge:'+cliVar(p?.cli)+'">'+
+    '<div class="r"><span class="small mono muted">'+esc(x.codigo)+'</span><span class="small">'+esc(pdTipo(x)?.nome||'')+'</span></div>'+
+    '<div class="t">'+esc(DI(x.disc)?.nome||'')+'</div><div class="m">'+esc(projLabel(p))+' · '+esc(CL(p?.cli)?.nome||'')+'</div>'+
+    '<div class="r"><span class="small">Resp.: <b>'+esc(uname(x.resp))+'</b></span><span class="mono small'+(pdVencido(x)?'" style="color:var(--bad);font-weight:600':'')+'">'+(x.prazo?'entrega '+br(x.prazo):'sem prazo')+'</span></div>'+
     (ts.length?'<div class="r"><div class="prog" style="flex:1"><i style="width:'+(done/ts.length*100)+'%"></i></div><span class="small mono">'+done+'/'+ts.length+'</span>'+(conf?'<span class="pill" style="color:var(--s-conferencia)">'+conf+' p/ conferir</span>':'')+'</div>':'<div class="small muted">Sem tarefas</div>')+
     extra+'</div>';
 }
 function projKanban(){
-  const cols=['aguardando','andamento','parado','finalizado'];
-  return '<p class="small muted" style="margin:0 0 8px">Arraste um cartão para mudar a situação do projeto. A situação do projeto não muda sozinha quando as tarefas são concluídas.</p><div class="kwrap"><div class="kanban">'+cols.map(s=>{
-    const L=S.projetos.filter(p=>p.sit===s).sort((a,b)=>(a.fim||'9')<(b.fim||'9')?-1:1);
-    return '<section class="kcol" data-drop="'+s+'"><h4>'+SIT_P[s]+'<span class="c">'+L.length+'</span></h4>'+(L.length?L.map(projCard).join(''):'<p class="small muted" style="margin:4px">Nenhum projeto.</p>')+'</section>'}).join('')+'</div></div>';
+  const cols=['andamento','parado','finalizado'];
+  return '<p class="small muted" style="margin:0 0 8px">Um cartão para cada disciplina de cada projeto. Arraste para mudar a situação; ela não muda sozinha quando as tarefas são concluídas.</p><div class="kwrap"><div class="kanban">'+cols.map(s=>{
+    const L=S.pdiscs.filter(x=>x.sit===s&&PR(x.proj)).sort((a,b)=>((a.prazo||'9')<(b.prazo||'9')?-1:(a.prazo||'9')>(b.prazo||'9')?1:(a.codigo||'').localeCompare(b.codigo||'')));
+    return '<section class="kcol" data-drop="'+s+'"><h4>'+SIT_D[s]+'<span class="c">'+L.length+'</span></h4>'+(L.length?L.map(pdCard).join(''):'<p class="small muted" style="margin:4px">Nenhuma disciplina.</p>')+'</section>'}).join('')+'</div></div>';
 }
 function bindCards(el){
   el.querySelectorAll('[data-open]').forEach(c=>{c.onclick=e=>{if(e.target.closest('[data-act]'))return;e.stopPropagation();openTask(c.dataset.open)};
     c.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&e.target===c){e.preventDefault();openTask(c.dataset.open)}}});
-  el.querySelectorAll('[data-proj]').forEach(c=>{c.onclick=()=>openProj(c.dataset.proj);c.onkeydown=e=>{if(e.key==='Enter'&&e.target===c)openProj(c.dataset.proj)}});
+  el.querySelectorAll('.kcard[data-pd]').forEach(c=>{const go=()=>{const x=PDx(c.dataset.pd);if(x)openProj(x.proj,x.id)};c.onclick=go;c.onkeydown=e=>{if(e.key==='Enter'&&e.target===c)go()}});
   el.querySelectorAll('[data-act]').forEach(b=>b.onclick=e=>{e.stopPropagation();const t=byId(S.tarefas,b.dataset.id);
     if(b.dataset.act==='start')doStart(t);
     else if(b.dataset.act==='send')openTask(t.id,null,'send');
@@ -673,22 +709,21 @@ function bindCards(el){
 }
 function bindProjDrag(el){
   let dragId=null;
-  el.querySelectorAll('[data-proj]').forEach(c=>{c.ondragstart=e=>{dragId=c.dataset.proj;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',dragId)}catch(x){}}});
+  el.querySelectorAll('.kcard[data-pd]').forEach(c=>{c.ondragstart=e=>{dragId=c.dataset.pd;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',dragId)}catch(x){}}});
   el.querySelectorAll('[data-drop]').forEach(col=>{
     col.ondragover=e=>{e.preventDefault();col.classList.add('over')};
     col.ondragleave=()=>col.classList.remove('over');
-    col.ondrop=e=>{e.preventDefault();col.classList.remove('over');const p=PR(dragId);const s=col.dataset.drop;if(!p||p.sit===s)return;
-      if(s==='parado'){askMotivo(p);return}
-      setProjSit(p,s);save();render();toast('Projeto movido para '+SIT_P[s])}});
+    col.ondrop=e=>{e.preventDefault();col.classList.remove('over');const x=PDx(dragId);const s=col.dataset.drop;if(!x||x.sit===s)return;
+      if(s==='parado'){askMotivo(x);return}
+      setPdSit(x,s);save();render();toast(pdLabel(x)+': '+SIT_D[s])}});
 }
-function setProjSit(p,s,motivo){const old=p.sit;p.sit=s;if(s==='parado')p.motivo=motivo||p.motivo;
-  if(s==='andamento'&&!p.ini)p.ini=TODAY;
-  log(p,'situacao','Situação: '+SIT_P[old]+' → '+SIT_P[s],s==='parado'?p.motivo:'')}
-function askMotivo(p,after){
+function setPdSit(x,s,motivo){const old=x.sit;x.sit=s;if(s==='parado')x.motivo=motivo||x.motivo;if(!Array.isArray(x.hist))x.hist=[];
+  log(x,'situacao','Situação: '+(SIT_D[old]||old||'—')+' → '+SIT_D[s],s==='parado'?x.motivo:'')}
+function askMotivo(x,after){
   const d=document.getElementById('dlg2'),f=document.getElementById('dlg2Form');
-  f.innerHTML='<div class="dlg-h"><div><div class="ctx">'+esc(projLabel(p))+'</div><h2>Por que o projeto parou?</h2></div></div><div class="dlg-b"><div class="f"><label for="mtv">Motivo da paralisação</label><textarea id="mtv" rows="3" placeholder="ex.: aguardando levantamento topográfico do cliente">'+esc(p.motivo)+'</textarea></div></div><div class="dlg-f"><span class="sp"></span><button class="btn" value="cancel">Cancelar</button><button class="btn primary" type="button" id="mtvOk">Marcar como parado</button></div>';
+  f.innerHTML='<div class="dlg-h"><div><div class="ctx">'+esc(pdLabel(x))+' · '+esc(projLabel(PR(x.proj)))+'</div><h2>Por que a disciplina parou?</h2></div></div><div class="dlg-b"><div class="f"><label for="mtv">Motivo da paralisação</label><textarea id="mtv" rows="3" placeholder="ex.: aguardando levantamento topográfico do cliente">'+esc(x.motivo)+'</textarea></div></div><div class="dlg-f"><span class="sp"></span><button class="btn" value="cancel">Cancelar</button><button class="btn primary" type="button" id="mtvOk">Marcar como parada</button></div>';
   f.querySelector('#mtvOk').onclick=()=>{const m=f.querySelector('#mtv').value.trim();if(!m){f.querySelector('#mtv').focus();toast('Informe o motivo');return}
-    setProjSit(p,'parado',m);save();d.close();render();if(after)after();toast('Projeto marcado como parado')};
+    setPdSit(x,'parado',m);save();d.close();render();if(after)after();toast('Disciplina marcada como parada')};
   d.showModal();setTimeout(()=>f.querySelector('#mtv').focus(),30);
 }
 
@@ -697,24 +732,30 @@ function askMotivo(p,after){
 // =====================================================================
 function blankTask(){return {id:'',proj:'',titulo:'',desc:'',resp:'',prio:3,ini:'',fim:'',iniBase:'',fimBase:'',iniReal:'',fimExec:'',aprovEm:'',aprovPor:'',sit:'pendente',onde:'',pend:'',atualEm:'',atualPor:'',criadoEm:'',hist:[]}}
 function doStart(t){const was=t.sit;if(!t.iniReal)t.iniReal=TODAY;t.sit='andamento';log(t,'situacao',was==='devolvida'?'Retomou após devolução':'Iniciou a execução');save();render();toast(was==='devolvida'?'Tarefa retomada':'Início registrado')}
-function projOptions(sel){
-  const groups=S.emps.map(e=>{const ps=S.projetos.filter(p=>p.emp===e.id&&(p.sit!=='finalizado'||p.id===sel));if(!ps.length)return '';
-    return '<optgroup label="'+esc(e.nome+' — '+(CL(e.cli)?.nome||''))+'">'+ps.map(p=>'<option value="'+p.id+'"'+(p.id===sel?' selected':'')+'>'+esc(projLabel(p)+' ('+(DI(p.disc)?.nome||'')+')')+'</option>').join('')+'</optgroup>'}).join('');
+function projOptions(sel,all){
+  const groups=S.clientes.map(c=>{const ps=S.projetos.filter(p=>p.cli===c.id&&(all||p.id===sel||projPds(p.id).some(x=>x.sit!=='finalizado')));if(!ps.length)return '';
+    return '<optgroup label="'+esc(c.nome)+'">'+ps.sort((a,b)=>projLabel(a).localeCompare(projLabel(b))).map(p=>'<option value="'+p.id+'"'+(p.id===sel?' selected':'')+'>'+esc(projLabel(p))+'</option>').join('')+'</optgroup>'}).join('');
   return '<option value="">Selecione o projeto…</option>'+groups}
+function pdOptions(pid,sel){
+  if(!pid)return '<option value="">Escolha o projeto primeiro</option>';
+  const L=projPds(pid).filter(x=>x.sit!=='finalizado'||x.id===sel);
+  if(!L.length)return '<option value="">Este projeto não tem disciplinas abertas</option>';
+  return (L.length>1?'<option value="">Selecione a disciplina…</option>':'')+L.map(x=>'<option value="'+x.id+'"'+(x.id===sel||L.length===1?' selected':'')+'>'+esc(pdLabel(x))+'</option>').join('')}
 function openTask(id,preset,focus){
   const isNew=!id;const t=id?byId(S.tarefas,id):Object.assign(blankTask(),preset||{});
   if(!t)return;
-  const coord=isCoord(),mine=t.resp===S.me;const p=PR(t.proj);
+  const coord=isCoord(),mine=t.resp===S.me;const p=PR(t.proj),pd=PDx(t.pd);
   const canPlan=coord;const canExec=!isNew&&(mine||coord);
-  const dlg=document.getElementById('dlg'),f=document.getElementById('dlgForm');
+  const dlg=document.getElementById('dlg'),f=document.getElementById('dlgForm');dlg.classList.remove('wide');
   const lastDev=t.sit==='devolvida'?[...t.hist].reverse().find(x=>x.k==='devolucao'):null;
   const dur=t.ini&&t.fim?wdBetween(t.ini,t.fim,daysOf(t.resp)):'';
-  let h='<div class="dlg-h"><div style="min-width:0"><div class="ctx" id="tCtx">'+(p?esc(CL(p.cli)?.nome)+' › '+esc(EM(p.emp)?.nome)+' › '+esc(projLabel(p))+' · '+esc(DI(p.disc)?.nome):'Nova tarefa')+'</div>'+
+  let h='<div class="dlg-h"><div style="min-width:0"><div class="ctx" id="tCtx">'+(p?esc(CL(p.cli)?.nome)+' › '+esc(projLabel(p))+(pd?' › '+esc(pdLabel(pd)):''):'Nova tarefa')+'</div>'+
     '<h2>'+(isNew?'Nova tarefa':esc(t.titulo))+'</h2>'+(isNew?'':'<div class="actions" style="margin-top:6px">'+sitPill(t.sit)+prioPill(t.prio)+(tVencida(t)?'<span class="pill bad">prazo vencido</span>':'')+'</div>')+'</div><button class="btn x" value="cancel" aria-label="Fechar">✕</button></div><div class="dlg-b">';
   // --- planejamento
   if(canPlan){
     h+='<section class="sec"><h4>Planejamento</h4><div class="fg">'+
-      '<div class="f full"><label for="tProj">Projeto</label><select id="tProj" required>'+projOptions(t.proj)+'</select></div>'+
+      '<div class="f"><label for="tProj">Projeto</label><select id="tProj">'+projOptions(t.proj)+'</select></div>'+
+      '<div class="f"><label for="tPd">Disciplina</label><select id="tPd">'+pdOptions(t.proj,t.pd)+'</select></div>'+
       (isNew?'<div class="f full"><label for="tMod">Usar modelo de tarefa</label><select id="tMod">'+opts(S.modelos.map(m=>[m.id,m.titulo+' ('+m.dur+' d.u.)']),'','— sem modelo —')+'</select></div>':'')+
       '<div class="f full"><label for="tTit">Título</label><input id="tTit" value="'+esc(t.titulo)+'" placeholder="ex.: Dimensionamento hidráulico"></div>'+
       '<div class="f full"><label for="tDesc">Descrição / instruções</label><textarea id="tDesc" rows="2">'+esc(t.desc)+'</textarea></div>'+
@@ -724,15 +765,15 @@ function openTask(id,preset,focus){
       '<div class="f"><label for="tIni">Início previsto</label><input id="tIni" type="date" value="'+t.ini+'"></div>'+
       '<div class="f"><label for="tDur">Duração (dias úteis)</label><input id="tDur" type="number" min="1" value="'+dur+'"></div>'+
       '<div class="f"><label for="tFim">Término previsto</label><input id="tFim" type="date" value="'+t.fim+'"></div>'+
-      '<div class="f full help" id="tHelp">O término é calculado pelos dias de trabalho do responsável.'+(t.fimBase&&t.fimBase!==t.fim?' Programação original: <b class="mono">'+br(t.iniBase)+' a '+br(t.fimBase)+'</b>.':'')+(p&&p.fim?' Entrega do projeto: <b class="mono">'+brY(p.fim)+'</b>.':'')+'</div>'+
+      '<div class="f full help" id="tHelp">O término é calculado pelos dias de trabalho do responsável.'+(t.fimBase&&t.fimBase!==t.fim?' Programação original: <b class="mono">'+br(t.iniBase)+' a '+br(t.fimBase)+'</b>.':'')+(pd&&pd.prazo?' Prazo da disciplina: <b class="mono">'+brY(pd.prazo)+'</b>.':'')+'</div>'+
       '</div></section>';
   }else{
     h+='<section class="sec"><h4>Tarefa e projeto</h4><div class="fg">'+
       '<div class="f full"><span class="lbl">Instruções</span><div class="ro">'+(esc(t.desc)||'<span class="muted">Sem instruções.</span>')+'</div></div>'+
       '<div class="f"><span class="lbl">Previsto</span><div class="ro mono">'+br(t.ini)+' a '+br(t.fim)+'</div></div>'+
-      '<div class="f"><span class="lbl">Entrega do projeto</span><div class="ro mono">'+brY(p?.fim)+'</div></div>'+
-      '<div class="f"><span class="lbl">Tipo / disciplina</span><div class="ro">'+esc(TI(p?.tipo)?.nome||'—')+' · '+esc(DI(p?.disc)?.nome||'')+'</div></div>'+
-      '<div class="f"><span class="lbl">Responsável pelo projeto</span><div class="ro">'+esc(uname(p?.resp))+'</div></div>'+
+      '<div class="f"><span class="lbl">Prazo da disciplina</span><div class="ro mono">'+brY(pd?.prazo)+'</div></div>'+
+      '<div class="f"><span class="lbl">Tipo / disciplina</span><div class="ro">'+esc(pdTipo(pd)?.nome||'—')+' · '+esc(pdLabel(pd))+'</div></div>'+
+      '<div class="f"><span class="lbl">Responsável pela disciplina</span><div class="ro">'+esc(uname(pd?.resp))+'</div></div>'+
       (p?.obs?'<div class="f full"><span class="lbl">Observações do projeto</span><div class="ro">'+esc(p.obs)+'</div></div>':'')+
       '</div></section>';
   }
@@ -776,14 +817,16 @@ function openTask(id,preset,focus){
     const recalcFim=()=>{const i=$('#tIni').value,d=+$('#tDur').value;if(i&&d>0)$('#tFim').value=addWd(i,d,daysOf($('#tResp').value))};
     const recalcDur=()=>{const i=$('#tIni').value,e=$('#tFim').value;if(i&&e&&e>=i)$('#tDur').value=wdBetween(i,e,daysOf($('#tResp').value))};
     $('#tIni').onchange=recalcFim;$('#tDur').oninput=recalcFim;$('#tResp').onchange=recalcFim;$('#tFim').onchange=recalcDur;
-    $('#tProj').onchange=()=>{const pp=PR($('#tProj').value);if(pp){$('#tCtx').textContent=(CL(pp.cli)?.nome||'')+' › '+(EM(pp.emp)?.nome||'')+' › '+projLabel(pp)+' · '+(DI(pp.disc)?.nome||'');}};
+    const updCtx=()=>{const pp=PR($('#tProj').value),dd=PDx($('#tPd').value);$('#tCtx').textContent=pp?(CL(pp.cli)?.nome||'')+' › '+projLabel(pp)+(dd?' › '+pdLabel(dd):''):'Nova tarefa'};
+    $('#tProj').onchange=()=>{$('#tPd').innerHTML=pdOptions($('#tProj').value,'');updCtx()};$('#tPd').onchange=updCtx;
     if($('#tMod'))$('#tMod').onchange=()=>{const m=byId(S.modelos,$('#tMod').value);if(!m)return;$('#tTit').value=m.titulo;$('#tDesc').value=m.desc;$('#tDur').value=m.dur;
       if(!$('#tIni').value){const pp=PR($('#tProj').value);$('#tIni').value=nextFree($('#tResp').value)||TODAY}recalcFim()};
   }
   function commitPlan(){
     if(!canPlan)return true;
-    const d={proj:$('#tProj').value,titulo:$('#tTit').value.trim(),desc:$('#tDesc').value.trim(),resp:$('#tResp').value,prio:+$('#tPrio').value,ini:$('#tIni').value,fim:$('#tFim').value};
+    const d={proj:$('#tProj').value,pd:$('#tPd').value,titulo:$('#tTit').value.trim(),desc:$('#tDesc').value.trim(),resp:$('#tResp').value,prio:+$('#tPrio').value,ini:$('#tIni').value,fim:$('#tFim').value};
     if(!d.proj){$('#tProj').focus();toast('Escolha o projeto');return false}
+    if(!d.pd){$('#tPd').focus();toast('Escolha a disciplina');return false}
     if(!d.titulo){$('#tTit').focus();toast('Dê um título à tarefa');return false}
     if(d.ini&&d.fim&&d.fim<d.ini){toast('O término não pode ser antes do início');return false}
     if(d.ini&&!d.fim)d.fim=d.ini;
@@ -793,7 +836,7 @@ function openTask(id,preset,focus){
     if(d.prio!==t.prio)log(t,'prio','Prioridade: '+PRIO[t.prio]+' → '+PRIO[d.prio]);
     if(d.ini!==t.ini||d.fim!==t.fim){if(!t.iniBase&&!t.fimBase){t.iniBase=d.ini;t.fimBase=d.fim;log(t,'prazo','Programou para '+br(d.ini)+' a '+br(d.fim))}
       else log(t,'prazo','Alterou o previsto de '+br(t.ini)+'–'+br(t.fim)+' para '+br(d.ini)+'–'+br(d.fim))}
-    if(d.titulo!==t.titulo||d.desc!==t.desc||d.proj!==t.proj)ch.push('dados');
+    if(d.titulo!==t.titulo||d.desc!==t.desc||d.proj!==t.proj||d.pd!==t.pd)ch.push('dados');
     Object.assign(t,d);if(ch.length)log(t,'edicao','Editou os dados da tarefa');return true}
   function commitExec(silent){
     if(!$('#tOnde')||$('#tOnde').disabled)return;
@@ -804,7 +847,7 @@ function openTask(id,preset,focus){
   }
   const finish=(msg,reopen)=>{save();render();if(reopen)openTask(t.id);else dlg.close();if(msg)toast(msg)};
   if($('#tSave'))$('#tSave').onclick=()=>{if(!commitPlan())return;commitExec();finish(isNew?'Tarefa criada':'Tarefa salva')};
-  if($('#tSaveNext'))$('#tSaveNext').onclick=()=>{if(!commitPlan())return;const keep={proj:t.proj,resp:t.resp,prio:t.prio,ini:t.fim?addWd(addI(t.fim,1),1,daysOf(t.resp)):''};save();render();toast('Tarefa criada. Preencha a próxima.');openTask(null,keep)};
+  if($('#tSaveNext'))$('#tSaveNext').onclick=()=>{if(!commitPlan())return;const keep={proj:t.proj,pd:t.pd,resp:t.resp,prio:t.prio,ini:t.fim?addWd(addI(t.fim,1),1,daysOf(t.resp)):''};save();render();toast('Tarefa criada. Preencha a próxima.');openTask(null,keep)};
   if($('#tDel'))$('#tDel').onclick=()=>{$('#delZone').innerHTML='<span class="actions small">Excluir de vez? <button class="btn danger sm" type="button" id="tDel2">Sim, excluir</button></span>';
     $('#tDel2').onclick=()=>{S.tarefas=S.tarefas.filter(x=>x.id!==t.id);finish('Tarefa excluída')}};
   if($('#aStart'))$('#aStart').onclick=()=>{if(!commitPlan())return;commitExec();const was=t.sit;if(!t.iniReal)t.iniReal=TODAY;t.sit='andamento';log(t,'situacao',was==='devolvida'?'Retomou após devolução':'Iniciou a execução');finish(was==='devolvida'?'Tarefa retomada':'Início registrado',true)};
@@ -826,81 +869,112 @@ function nextFree(uidv){if(!uidv)return '';const L=S.tarefas.filter(t=>t.resp===
 // =====================================================================
 // PROJETO — janela
 // =====================================================================
-function openProj(id){
-  const isNew=!id;const p=id?PR(id):{id:'',codigo:'',nome:'',cli:'',emp:'',disc:'',tipo:'',resp:S.me,ini:'',fim:'',est:'',sit:'aguardando',motivo:'',obs:'',hist:[]};
-  const dlg=document.getElementById('dlg'),f=document.getElementById('dlgForm');
-  const ts=isNew?[]:projTasks(p.id).sort((a,b)=>(a.ini||'9')<(b.ini||'9')?-1:1);
-  let h='<div class="dlg-h"><div><div class="ctx">'+(isNew?'Cliente › Empreendimento › Projeto':esc(CL(p.cli)?.nome)+' › '+esc(EM(p.emp)?.nome))+'</div><h2>'+(isNew?'Novo projeto':esc(projLabel(p)))+'</h2></div><button class="btn x" value="cancel" aria-label="Fechar">✕</button></div><div class="dlg-b">'+
+function openProj(id,focusPd){
+  const isNew=!id;const p=id?PR(id):{id:'',cli:'',emp:'',cat:'',tipo:S.tipos[0]?.id||'',obs:'',hist:[]};
+  if(!p)return;
+  const dlg=document.getElementById('dlg'),f=document.getElementById('dlgForm');dlg.classList.add('wide');
+  let rows=isNew?[]:projPds(p.id).map(x=>({id:x.id,disc:x.disc,codigo:x.codigo,tipo:x.tipo||'',resp:x.resp||'',prazo:x.prazo||'',est:x.est||'',sit:x.sit||'andamento',motivo:x.motivo||'',old:true}));
+  const ts=isNew?[]:projTasks(p.id);
+  let h='<div class="dlg-h"><div><div class="ctx">'+(isNew?'Cliente › Empreendimento':esc(CL(p.cli)?.nome))+'</div><h2>'+(isNew?'Novo projeto':esc(projLabel(p)))+'</h2></div><button class="btn x" value="cancel" aria-label="Fechar">✕</button></div><div class="dlg-b">'+
    '<section class="sec"><h4>Dados do projeto</h4><div class="fg">'+
    '<div class="f"><label for="pCli">Cliente</label><select id="pCli">'+opts(S.clientes.map(c=>[c.id,c.nome]),p.cli,'Selecione…')+'<option value="__new">+ Cadastrar novo cliente</option></select><input id="pCliNew" placeholder="Nome do novo cliente" hidden></div>'+
    '<div class="f"><label for="pEmp">Empreendimento</label><select id="pEmp"></select><input id="pEmpNew" placeholder="Nome do novo empreendimento" hidden></div>'+
-   '<div class="f"><label for="pCod">Código</label><input id="pCod" value="'+esc(p.codigo)+'" readonly tabindex="-1" style="background:var(--weekend);font-family:var(--f-mono)" placeholder="gerado automaticamente"><span class="help">Sigla do empreendimento + código da disciplina.</span></div>'+
-   '<div class="f"><label for="pNome">Nome do projeto</label><input id="pNome" value="'+esc(p.nome)+'" placeholder="ex.: Abastecimento de água"></div>'+
-   '<div class="f"><label for="pDisc">Disciplina</label><select id="pDisc">'+opts(S.discs.map(d=>[d.id,d.nome]),p.disc,'Selecione…')+'</select></div>'+
-   '<div class="f"><label for="pTipo">Tipo de projeto</label><select id="pTipo">'+opts(S.tipos.map(d=>[d.id,d.nome]),p.tipo,'Selecione…')+'</select></div>'+
-   '<div class="f"><label for="pResp">Responsável pelo projeto</label><select id="pResp">'+opts(ativos().map(u=>[u.id,u.nome]),p.resp,'—')+'</select></div>'+
-   '<div class="f"><label for="pSit">Situação</label><select id="pSit">'+opts(Object.entries(SIT_P),p.sit)+'</select></div>'+
-   '<div class="f full" id="pMotWrap"'+(p.sit==='parado'?'':' hidden')+'><label for="pMot">Motivo da paralisação</label><input id="pMot" value="'+esc(p.motivo)+'"></div>'+
-   '</div><div class="fg c3" style="margin-top:10px">'+
-   '<div class="f"><label for="pIni">Início previsto</label><input id="pIni" type="date" value="'+p.ini+'"></div>'+
-   '<div class="f"><label for="pFim">Prazo de entrega</label><input id="pFim" type="date" value="'+p.fim+'"></div>'+
-   '<div class="f"><label for="pEst">Estimativa (d.u.)</label><input id="pEst" type="number" min="1" value="'+esc(p.est)+'"><span class="help" id="pLs"></span></div>'+
-   '<div class="f full"><label for="pObs">Observações</label><textarea id="pObs" rows="2">'+esc(p.obs)+'</textarea></div>'+
-   '</div></section>';
+   '<div class="f"><label for="pCat">Tipo de empreendimento</label><select id="pCat">'+opts(S.categorias.map(c=>[c.id,c.nome]),p.cat,'Selecione…')+'<option value="__new">+ Outro tipo…</option></select><input id="pCatNew" placeholder="ex.: Loteamento industrial" hidden></div>'+
+   '<div class="f"><label for="pTipo">Tipo de projeto</label><select id="pTipo">'+opts(S.tipos.map(d=>[d.id,d.nome]),p.tipo,'Selecione…')+'</select><span class="help">Vale para todas as disciplinas; dá para trocar em uma disciplina específica.</span></div>'+
+   '<div class="f full"><label for="pObs">Observações</label><textarea id="pObs" rows="2">'+esc(p.obs||'')+'</textarea></div>'+
+   '</div></section>'+
+   '<section class="sec"><h4>Disciplinas do projeto</h4><p class="small muted" style="margin:0 0 8px">Marque as disciplinas que serão desenvolvidas. O prazo é opcional e pode ser preenchido quando estiver definido.</p><div class="dchips" id="pdChips"></div><div id="pdRows"></div></section>';
   if(!isNew){
+    const sorted=ts.slice().sort((a,b)=>((tPD(a)?.codigo||'').localeCompare(tPD(b)?.codigo||''))||((a.ini||'9')<(b.ini||'9')?-1:1));
     h+='<section class="sec"><h4>Tarefas do projeto <span class="sp" style="flex:1"></span><button class="btn sm" type="button" id="pFromMod">+ A partir de modelos</button><button class="btn sm primary" type="button" id="pNewT">+ Tarefa</button></h4><div id="modZone"></div>'+
-      (ts.length?'<div class="tblwrap"><table><thead><tr><th>Tarefa</th><th>Responsável</th><th class="n">Previsto</th><th>Situação</th></tr></thead><tbody>'+ts.map(t=>'<tr class="click" data-t="'+t.id+'"><td><b>'+esc(t.titulo)+'</b></td><td>'+esc(uname(t.resp))+'</td><td class="n">'+br(t.ini)+'–'+br(t.fim)+'</td><td>'+sitPill(t.sit)+'</td></tr>').join('')+'</tbody></table></div>':'<p class="small muted" style="margin:0">Nenhuma tarefa ainda. Use os modelos para criar a sequência de uma vez.</p>')+'</section>';
-    h+='<section class="sec"><h4>Histórico do projeto</h4><ul class="hist">'+[...p.hist].reverse().map(x=>'<li><time>'+brTs(x.ts)+'</time><b>'+esc(uname(x.u))+'</b> — '+esc(x.txt)+(x.det?'<span class="tx">'+esc(x.det)+'</span>':'')+'</li>').join('')+'</ul></section>';
+      (sorted.length?'<div class="tblwrap"><table><thead><tr><th>Disciplina</th><th>Tarefa</th><th>Responsável</th><th class="n">Previsto</th><th>Situação</th></tr></thead><tbody>'+sorted.map(t=>'<tr class="click" data-t="'+t.id+'"><td class="mono small">'+esc(tPD(t)?.codigo||'—')+'</td><td><b>'+esc(t.titulo)+'</b></td><td>'+esc(uname(t.resp))+'</td><td class="n">'+br(t.ini)+'–'+br(t.fim)+'</td><td>'+sitPill(t.sit)+'</td></tr>').join('')+'</tbody></table></div>':'<p class="small muted" style="margin:0">Nenhuma tarefa ainda. Use os modelos para criar a sequência de uma vez.</p>')+'</section>';
+    const hs=(p.hist||[]).map(x=>Object.assign({},x,{pre:''})).concat(...projPds(p.id).map(x=>(x.hist||[]).map(y=>Object.assign({},y,{pre:x.codigo}))));
+    hs.sort((a,b)=>a.ts<b.ts?1:-1);
+    h+='<section class="sec"><h4>Histórico do projeto</h4><ul class="hist">'+hs.map(x=>'<li><time>'+brTs(x.ts)+'</time>'+(x.pre?'<span class="mono small">'+esc(x.pre)+'</span> ':'')+'<b>'+esc(uname(x.u))+'</b> — '+esc(x.txt)+(x.det?'<span class="tx">'+esc(x.det)+'</span>':'')+'</li>').join('')+'</ul></section>';
   }
   h+='</div><div class="dlg-f">'+(isNew?'':'<span id="pDelZone"><button class="btn danger" type="button" id="pDel">Excluir</button></span>')+'<span class="sp"></span><button class="btn" value="cancel">Cancelar</button><button class="btn primary" type="button" id="pSave">'+(isNew?'Criar projeto':'Salvar')+'</button></div>';
   f.innerHTML=h;const $=s=>f.querySelector(s);
   const fillEmp=()=>{const c=$('#pCli').value;const L=S.emps.filter(e=>!c||c==='__new'||e.cli===c);
     $('#pEmp').innerHTML=opts(L.map(e=>[e.id,e.nome+(c?'':' ('+(CL(e.cli)?.sigla||CL(e.cli)?.nome||'')+')')]),p.emp,'Selecione…')+'<option value="__new">+ Cadastrar novo empreendimento</option>'};
   fillEmp();
-  $('#pCli').onchange=()=>{$('#pCliNew').hidden=$('#pCli').value!=='__new';if(!$('#pCliNew').hidden)$('#pCliNew').focus();p.emp='';fillEmp()};
-  $('#pEmp').onchange=()=>{const v=$('#pEmp').value;$('#pEmpNew').hidden=v!=='__new';if(v==='__new'){$('#pEmpNew').focus();return}
-    const e=EM(v);if(e&&$('#pCli').value!==e.cli){$('#pCli').value=e.cli;p.emp=v;fillEmp()}};
-  const updCode=()=>{const e=$('#pEmp').value,d=$('#pDisc').value;
-    if(!isNew&&e===p.emp&&d===p.disc){$('#pCod').value=p.codigo;return}
-    const dd=DI(d);const ns=sugEmpSigla($('#pEmpNew').value);$('#pCod').value=dd?(e==='__new'?(ns?ns+'-':'')+dd.sigla:projCode(e,d,p.id)):'';
-    if(dd&&!$('#pNome').value.trim())$('#pNome').value=dd.nome};
-  $('#pDisc').addEventListener('change',updCode);$('#pEmp').addEventListener('change',updCode);$('#pCli').addEventListener('change',updCode);$('#pEmpNew').addEventListener('input',updCode);
-  $('#pSit').onchange=()=>{$('#pMotWrap').hidden=$('#pSit').value!=='parado';if(!$('#pMotWrap').hidden)$('#pMot').focus()};
-  const lsUpd=()=>{const fm=$('#pFim').value,e=+$('#pEst').value;$('#pLs').innerHTML=fm&&e?'Começar até <b class="mono">'+brY(latestStart(fm,e,daysOf($('#pResp').value)))+'</b>':'Opcional; calcula até quando começar.'};
-  $('#pFim').onchange=lsUpd;$('#pEst').oninput=lsUpd;lsUpd();
+  const codeFor=r=>{const v=$('#pEmp').value;if(r.old&&v===p.emp&&r.codigo)return r.codigo;const d=DI(r.disc);if(!d)return '';
+    if(v&&v!=='__new')return pdCode(v,r.disc,r.id);const sg=sugEmpSigla($('#pEmpNew').value);return (sg?sg+'-':'')+(d.sigla||sugSigla(d.nome))};
+  const syncRows=()=>rows.forEach(r=>{const g=k=>f.querySelector('#pd_'+r.id+'_'+k);if(!g('sit'))return;r.tipo=g('tipo').value;r.resp=g('resp').value;r.prazo=g('prazo').value;r.est=g('est').value;r.sit=g('sit').value;r.motivo=g('mot').value.trim()});
+  function renderRows(){
+    $('#pdChips').innerHTML=S.discs.map(d=>'<label><input type="checkbox" value="'+d.id+'"'+(rows.some(r=>r.disc===d.id)?' checked':'')+'>'+esc(d.nome)+'</label>').join('');
+    $('#pdRows').innerHTML=rows.length?'<div class="tblwrap" style="margin-top:10px"><table><thead><tr><th>Código</th><th>Disciplina</th><th>Tipo</th><th>Responsável</th><th>Prazo de entrega</th><th title="Estimativa em dias úteis; com o prazo, calcula até quando começar">Est. (d.u.)</th><th>Situação</th><th class="n">Tarefas</th></tr></thead><tbody>'+
+      rows.map(r=>{const n=ts.filter(t=>t.pd===r.id).length,k='pd_'+r.id+'_';
+        return '<tr id="row_'+r.id+'"'+(r.id===focusPd?' class="hl"':'')+'><td class="mono small" style="white-space:nowrap">'+esc(codeFor(r))+'</td><td><b>'+esc(DI(r.disc)?.nome||'')+'</b></td>'+
+          '<td style="min-width:130px"><select id="'+k+'tipo">'+opts(S.tipos.map(x=>[x.id,x.nome]),r.tipo,'Igual ao projeto')+'</select></td>'+
+          '<td style="min-width:120px"><select id="'+k+'resp">'+opts(ativos().map(u=>[u.id,u.nome]),r.resp,'—')+'</select></td>'+
+          '<td style="min-width:140px"><input type="date" id="'+k+'prazo" value="'+r.prazo+'"></td>'+
+          '<td style="width:80px"><input type="number" min="1" id="'+k+'est" value="'+esc(r.est)+'"></td>'+
+          '<td style="min-width:140px"><select id="'+k+'sit">'+opts(Object.entries(SIT_D),r.sit)+'</select><input id="'+k+'mot" placeholder="Motivo da paralisação" value="'+esc(r.motivo)+'"'+(r.sit==='parado'?'':' hidden')+' style="margin-top:4px"></td>'+
+          '<td class="n" style="white-space:nowrap">'+n+(r.old?' <button class="btn sm" type="button" data-newt="'+r.id+'" title="Nova tarefa nesta disciplina" aria-label="Nova tarefa em '+esc(DI(r.disc)?.nome||'')+'">+</button>':'')+'</td></tr>'}).join('')+'</tbody></table></div>':'<p class="small muted" style="margin:10px 0 0">Nenhuma disciplina marcada ainda.</p>';
+    $('#pdChips').querySelectorAll('input').forEach(c=>c.onchange=()=>{syncRows();
+      if(c.checked){rows.push({id:uid('pd'),disc:c.value,codigo:'',tipo:'',resp:'',prazo:'',est:'',sit:'andamento',motivo:'',old:false})}
+      else{const r=rows.find(x=>x.disc===c.value);if(r&&ts.some(t=>t.pd===r.id)){c.checked=true;toast('Esta disciplina já tem tarefas. Exclua ou mude as tarefas de disciplina antes de removê-la.');return}rows=rows.filter(x=>x.disc!==c.value)}
+      rows.sort((a,b)=>(DI(a.disc)?.nome||'').localeCompare(DI(b.disc)?.nome||''));renderRows()});
+    rows.forEach(r=>{const s=f.querySelector('#pd_'+r.id+'_sit'),m=f.querySelector('#pd_'+r.id+'_mot');s.onchange=()=>{m.hidden=s.value!=='parado';if(!m.hidden)m.focus()}});
+    f.querySelectorAll('[data-newt]').forEach(b=>b.onclick=()=>{if(!commit())return;save();const x=PDx(b.dataset.newt);openTask(null,{proj:p.id,pd:x.id,resp:x.resp||'',ini:x.resp?nextFree(x.resp):''})});
+  }
+  renderRows();
+  if(focusPd)setTimeout(()=>{const r=f.querySelector('#row_'+focusPd);if(r)r.scrollIntoView({block:'center'})},60);
+  $('#pCli').onchange=()=>{$('#pCliNew').hidden=$('#pCli').value!=='__new';if(!$('#pCliNew').hidden)$('#pCliNew').focus();p.emp='';fillEmp();syncRows();renderRows()};
+  $('#pEmp').onchange=()=>{const v=$('#pEmp').value;$('#pEmpNew').hidden=v!=='__new';if(v==='__new')$('#pEmpNew').focus();
+    else{const e=EM(v);if(e&&$('#pCli').value!==e.cli){$('#pCli').value=e.cli;fillEmp();$('#pEmp').value=v}}syncRows();renderRows()};
+  $('#pEmpNew').oninput=()=>{syncRows();renderRows()};
+  $('#pCat').onchange=()=>{$('#pCatNew').hidden=$('#pCat').value!=='__new';if(!$('#pCatNew').hidden)$('#pCatNew').focus()};
   function commit(){
-    let cli=$('#pCli').value,emp=$('#pEmp').value;
-    if(cli==='__new'){const n=$('#pCliNew').value.trim();if(!n){$('#pCliNew').focus();toast('Informe o nome do cliente');return false}const c={id:uid('c'),nome:n,sigla:''};S.clientes.push(c);cli=c.id}
+    syncRows();
+    let cli=$('#pCli').value,emp=$('#pEmp').value,cat=$('#pCat').value;
+    if(cli==='__new'){const n=$('#pCliNew').value.trim();if(!n){$('#pCliNew').focus();toast('Informe o nome do cliente');return false}const c={id:uid('c'),nome:n,sigla:'',cor:S.clientes.length%8};S.clientes.push(c);cli=c.id;$('#pCli').innerHTML=opts(S.clientes.map(c=>[c.id,c.nome]),cli)+'<option value="__new">+ Cadastrar novo cliente</option>';$('#pCliNew').hidden=true}
     if(!cli){$('#pCli').focus();toast('Escolha o cliente');return false}
-    if(emp==='__new'){const n=$('#pEmpNew').value.trim();if(!n){$('#pEmpNew').focus();toast('Informe o nome do empreendimento');return false}const e={id:uid('e'),nome:n,sigla:sugEmpSigla(n),cli};S.emps.push(e);emp=e.id}
+    if(emp==='__new'){const n=$('#pEmpNew').value.trim();if(!n){$('#pEmpNew').focus();toast('Informe o nome do empreendimento');return false}const e={id:uid('e'),nome:n,sigla:sugEmpSigla(n),cli};S.emps.push(e);emp=e.id;p.emp=p.emp||'';fillEmp();$('#pEmp').value=emp;$('#pEmpNew').hidden=true}
     if(!emp){$('#pEmp').focus();toast('Escolha o empreendimento');return false}
     if(EM(emp).cli!==cli){toast('Esse empreendimento pertence a outro cliente');return false}
-    const d={cli,emp,codigo:(!isNew&&emp===p.emp&&$('#pDisc').value===p.disc)?p.codigo:projCode(emp,$('#pDisc').value,p.id),nome:$('#pNome').value.trim(),disc:$('#pDisc').value,tipo:$('#pTipo').value,resp:$('#pResp').value,ini:$('#pIni').value,fim:$('#pFim').value,est:$('#pEst').value,obs:$('#pObs').value.trim()};
-    const sit=$('#pSit').value,mot=$('#pMot').value.trim();
-    if(!d.nome){$('#pNome').focus();toast('Dê um nome ao projeto');return false}
-    if(!d.disc){$('#pDisc').focus();toast('Escolha a disciplina');return false}
-    if(sit==='parado'&&!mot){$('#pMot').focus();toast('Informe o motivo da paralisação');return false}
-    if(isNew){Object.assign(p,d,{id:uid('p'),sit,motivo:sit==='parado'?mot:''});log(p,'criacao','Criou o projeto');S.projetos.push(p)}
-    else{if(d.fim!==p.fim)log(p,'prazo','Prazo de entrega: '+brY(p.fim)+' → '+brY(d.fim));if(d.resp!==p.resp)log(p,'resp','Responsável: '+uname(p.resp)+' → '+uname(d.resp));
-      Object.assign(p,d);if(sit!==p.sit||(sit==='parado'&&mot!==p.motivo)){p.motivo=mot;if(sit!==p.sit)setProjSit(p,sit,mot)}}
+    if(cat==='__new'){const n=$('#pCatNew').value.trim();if(!n){$('#pCatNew').focus();toast('Informe o tipo de empreendimento');return false}
+      const ex=S.categorias.find(c=>c.nome.toLowerCase()===n.toLowerCase());if(ex)cat=ex.id;else{const c={id:uid('cat'),nome:n};S.categorias.push(c);cat=c.id}
+      $('#pCat').innerHTML=opts(S.categorias.map(c=>[c.id,c.nome]),cat)+'<option value="__new">+ Outro tipo…</option>';$('#pCatNew').hidden=true}
+    if(!rows.length){toast('Marque ao menos uma disciplina');return false}
+    const bad=rows.find(r=>r.sit==='parado'&&!r.motivo);if(bad){toast('Informe o motivo da paralisação de '+(DI(bad.disc)?.nome||''));const m=f.querySelector('#pd_'+bad.id+'_mot');if(m)m.focus();return false}
+    const empChanged=!isNew&&emp!==p.emp;
+    const d={cli,emp,cat,tipo:$('#pTipo').value,obs:$('#pObs').value.trim()};
+    if(isNew){Object.assign(p,d,{id:uid('p')});log(p,'criacao','Criou o projeto');S.projetos.push(p)}
+    else{if(empChanged)log(p,'edicao','Empreendimento: '+(EM(p.emp)?.nome||'—')+' → '+EM(emp).nome);Object.assign(p,d);['disc','codigo','nome','ini','fim','est','sit','motivo','resp'].forEach(k=>delete p[k])}
+    const keep=new Set(rows.map(r=>r.id));
+    S.pdiscs.filter(x=>x.proj===p.id&&!keep.has(x.id)).forEach(x=>log(p,'disciplina','Removeu a disciplina '+(DI(x.disc)?.nome||'')));
+    S.pdiscs=S.pdiscs.filter(x=>x.proj!==p.id||keep.has(x.id));
+    rows.forEach(r=>{let x=PDx(r.id);const codigo=(x&&!empChanged&&x.codigo)?x.codigo:pdCode(emp,r.disc,r.id);
+      if(!x){x={id:r.id,proj:p.id,disc:r.disc,codigo,tipo:r.tipo,resp:r.resp,prazo:r.prazo,est:r.est,sit:r.sit,motivo:r.sit==='parado'?r.motivo:'',hist:[]};log(x,'criacao','Incluiu a disciplina no projeto');S.pdiscs.push(x);if(!isNew)log(p,'disciplina','Incluiu a disciplina '+(DI(r.disc)?.nome||''))}
+      else{if(!Array.isArray(x.hist))x.hist=[];
+        if(r.prazo!==(x.prazo||''))log(x,'prazo','Prazo de entrega: '+brY(x.prazo)+' → '+brY(r.prazo));
+        if(r.resp!==(x.resp||''))log(x,'resp','Responsável: '+uname(x.resp)+' → '+uname(r.resp));
+        if(r.sit!==x.sit)setPdSit(x,r.sit,r.motivo);else if(r.sit==='parado')x.motivo=r.motivo;
+        Object.assign(x,{codigo,tipo:r.tipo,resp:r.resp,prazo:r.prazo,est:r.est})}
+      r.old=true;r.codigo=codigo});
     return true}
-  $('#pSave').onclick=()=>{if(!commit())return;save();render();if(isNew){openProj(p.id);toast('Projeto criado. Agora adicione as tarefas.')}else{dlg.close();toast('Projeto salvo')}};
-  if($('#pDel'))$('#pDel').onclick=()=>{const n=projTasks(p.id).length;$('#pDelZone').innerHTML='<span class="actions small">'+(n?'Exclui também '+n+' tarefa'+(n>1?'s':'')+'.':'Excluir de vez?')+' <button class="btn danger sm" type="button" id="pDel2">Confirmar</button></span>';
-    $('#pDel2').onclick=()=>{S.tarefas=S.tarefas.filter(t=>t.proj!==p.id);S.projetos=S.projetos.filter(x=>x.id!==p.id);save();render();dlg.close();toast('Projeto excluído')}};
-  if($('#pNewT'))$('#pNewT').onclick=()=>{if(!commit())return;save();openTask(null,{proj:p.id,resp:p.resp,ini:nextFree(p.resp)})};
+  $('#pSave').onclick=()=>{if(!commit())return;save();render();if(isNew){openProj(p.id);toast('Projeto criado. Agora crie as tarefas.')}else{dlg.close();toast('Projeto salvo')}};
+  if($('#pDel'))$('#pDel').onclick=()=>{const n=projTasks(p.id).length;$('#pDelZone').innerHTML='<span class="actions small">'+(n?'Exclui também '+n+' tarefa'+(n>1?'s':'')+' e as disciplinas.':'Excluir de vez?')+' <button class="btn danger sm" type="button" id="pDel2">Confirmar</button></span>';
+    $('#pDel2').onclick=()=>{S.tarefas=S.tarefas.filter(t=>t.proj!==p.id);S.pdiscs=S.pdiscs.filter(x=>x.proj!==p.id);S.projetos=S.projetos.filter(x=>x.id!==p.id);save();render();dlg.close();toast('Projeto excluído')}};
+  const firstPd=()=>focusPd&&PDx(focusPd)?focusPd:(rows.length===1?rows[0].id:'');
+  if($('#pNewT'))$('#pNewT').onclick=()=>{if(!commit())return;save();const x=PDx(firstPd());openTask(null,{proj:p.id,pd:x?x.id:'',resp:x?.resp||'',ini:x?.resp?nextFree(x.resp):''})};
   f.querySelectorAll('[data-t]').forEach(r=>r.onclick=()=>openTask(r.dataset.t));
   if($('#pFromMod'))$('#pFromMod').onclick=()=>{
-    $('#modZone').innerHTML='<div class="fg" style="margin-bottom:10px"><div class="f full"><span class="lbl">Modelos, na ordem de execução</span><div class="checklist">'+S.modelos.map(m=>'<label><input type="checkbox" value="'+m.id+'"> '+esc(m.titulo)+' <span class="muted mono small">'+m.dur+' d.u.</span></label>').join('')+'</div></div>'+
-      '<div class="f"><label for="mResp">Responsável</label><select id="mResp">'+opts(ativos().map(u=>[u.id,u.nome]),p.resp)+'</select></div>'+
-      '<div class="f"><label for="mIni">Começar em</label><input id="mIni" type="date" value="'+(nextFree(p.resp)||TODAY)+'"></div>'+
+    const cur=PDx(firstPd());
+    $('#modZone').innerHTML='<div class="fg" style="margin-bottom:10px"><div class="f"><label for="mPd">Disciplina</label><select id="mPd">'+pdOptions(p.id,cur?cur.id:'')+'</select></div><div class="f"><label for="mResp">Responsável</label><select id="mResp">'+opts(ativos().map(u=>[u.id,u.nome]),cur?.resp||'','— definir —')+'</select></div>'+
+      '<div class="f full"><span class="lbl">Modelos, na ordem de execução</span><div class="checklist">'+S.modelos.map(m=>'<label><input type="checkbox" value="'+m.id+'"> '+esc(m.titulo)+' <span class="muted mono small">'+m.dur+' d.u.</span></label>').join('')+'</div></div>'+
+      '<div class="f"><label for="mIni">Começar em</label><input id="mIni" type="date" value="'+((cur?.resp&&nextFree(cur.resp))||TODAY)+'"></div>'+
       '<div class="f full"><div class="actions"><button class="btn primary" type="button" id="mGo">Criar tarefas em sequência</button><span class="small muted">As datas são encadeadas pelos dias de trabalho do responsável.</span></div></div></div>';
+    $('#mPd').onchange=()=>{const x=PDx($('#mPd').value);if(x&&x.resp){$('#mResp').value=x.resp;$('#mIni').value=nextFree(x.resp)||TODAY}};
     $('#mResp').onchange=()=>{$('#mIni').value=nextFree($('#mResp').value)||TODAY};
-    $('#mGo').onclick=()=>{const ids=[...f.querySelectorAll('.checklist input:checked')].map(i=>i.value);if(!ids.length){toast('Marque ao menos um modelo');return}
-      if(!commit())return;const r=$('#mResp').value,dd=daysOf(r);let cur=addWd($('#mIni').value,1,dd);
+    $('#mGo').onclick=()=>{const ids=[...f.querySelectorAll('#modZone .checklist input:checked')].map(i=>i.value);const pdv=$('#mPd').value;
+      if(!pdv){$('#mPd').focus();toast('Escolha a disciplina');return}if(!ids.length){toast('Marque ao menos um modelo');return}
+      if(!commit())return;const r=$('#mResp').value,dd=daysOf(r);let cur=addWd($('#mIni').value||TODAY,1,dd);
       ids.forEach(mid=>{const m=byId(S.modelos,mid);const fim=addWd(cur,m.dur,dd);
-        const t=Object.assign(blankTask(),{id:uid('k'),proj:p.id,titulo:m.titulo,desc:m.desc,resp:r,prio:3,ini:cur,fim,iniBase:cur,fimBase:fim,criadoEm:nowStamp()});
-        log(t,'criacao','Criou a tarefa (modelo) e atribuiu a '+uname(r));S.tarefas.push(t);cur=addWd(addI(fim,1),1,dd)});
-      save();render();openProj(p.id);toast(ids.length+' tarefas criadas')}};
+        const t=Object.assign(blankTask(),{id:uid('k'),proj:p.id,pd:pdv,titulo:m.titulo,desc:m.desc,resp:r,prio:3,ini:cur,fim,iniBase:cur,fimBase:fim,criadoEm:nowStamp()});
+        log(t,'criacao','Criou a tarefa (modelo)'+(r?' e atribuiu a '+uname(r):''));S.tarefas.push(t);cur=addWd(addI(fim,1),1,dd)});
+      save();render();openProj(p.id,pdv);toast(ids.length+' tarefas criadas')}};
   if(!dlg.open)dlg.showModal();
 }
 
@@ -909,10 +983,11 @@ function openProj(id){
 // =====================================================================
 let PL={mode:'gantt',cal:'mes',anchor:TODAY,zoom:'5',f:{user:'',proj:'',emp:'',disc:'',sit:'abertas'}};
 function planTasks(){const F=PL.f;return visibleTasks().filter(t=>{const p=PR(t.proj);
-  if(F.user&&t.resp!==F.user)return false;if(F.proj&&t.proj!==F.proj)return false;if(F.emp&&p?.emp!==F.emp)return false;if(F.disc&&p?.disc!==F.disc)return false;
+  if(F.user&&t.resp!==F.user)return false;if(F.proj&&t.proj!==F.proj)return false;if(F.emp&&p?.emp!==F.emp)return false;if(F.disc&&tPD(t)?.disc!==F.disc)return false;
   if(F.sit==='abertas'&&t.sit==='concluida')return false;if(F.sit&&F.sit!=='abertas'&&t.sit!==F.sit)return false;return true})}
-function planDeadlines(){const F=PL.f;return S.projetos.filter(p=>p.fim&&(!F.proj||p.id===F.proj)&&(!F.emp||p.emp===F.emp)&&(!F.disc||p.disc===F.disc)&&
-  (isCoord()?(!F.user||p.resp===F.user||projTasks(p.id).some(t=>t.resp===F.user)):projTasks(p.id).some(t=>t.resp===S.me)))}
+function planDeadlines(){const F=PL.f;return S.pdiscs.filter(x=>{const p=PR(x.proj);if(!p||!x.prazo)return false;
+  if(F.proj&&x.proj!==F.proj)return false;if(F.emp&&p.emp!==F.emp)return false;if(F.disc&&x.disc!==F.disc)return false;
+  return isCoord()?(!F.user||x.resp===F.user||pdTasks(x.id).some(t=>t.resp===F.user)):pdTasks(x.id).some(t=>t.resp===S.me)})}
 function planUsers(){if(!isCoord())return [me()];return ativos().filter(u=>!PL.f.user||u.id===PL.f.user)}
 function renderPlan(el){
   const coord=isCoord();const F=PL.f;
@@ -944,7 +1019,7 @@ function renderPlanBody(){
   const used=[...new Set(planTasks().map(t=>PR(t.proj)?.cli))].filter(Boolean);
   document.getElementById('plLegend').innerHTML=used.map(c=>'<span><i class="sw" style="background:'+cliVar(c)+'"></i>'+esc(CL(c)?.nome)+'</span>').join('')+
     '<span><i class="sw" style="border:1.5px dashed var(--muted)"></i>pendente (planejada)</span><span><i class="sw" style="background:var(--line);box-shadow:0 0 0 2px var(--s-devolvida) inset"></i>devolvida</span><span><i class="sw" style="background:repeating-linear-gradient(135deg,var(--line) 0 3px,var(--s-conferencia) 3px 5px)"></i>em conferência</span><span>borda esquerda = prioridade</span>'+
-    (PL.mode==='gantt'?'<span><i class="sw" style="background:var(--load0)"></i>dia livre</span><span><i class="sw" style="background:var(--load2)"></i>tarefas sobrepostas</span><span><i class="sw" style="background:repeating-linear-gradient(135deg,var(--off) 0 3px,transparent 3px 6px);border:1px solid var(--line)"></i>não trabalha</span>':'<span style="color:var(--bad)">⚑ entrega de projeto</span>');
+    (PL.mode==='gantt'?'<span><i class="sw" style="background:var(--load0)"></i>dia livre</span><span><i class="sw" style="background:var(--load2)"></i>tarefas sobrepostas</span><span><i class="sw" style="background:repeating-linear-gradient(135deg,var(--off) 0 3px,transparent 3px 6px);border:1px solid var(--line)"></i>não trabalha</span>':'<span style="color:var(--bad)">⚑ prazo de disciplina</span>');
 }
 const activeOn=(t,d)=>{const r=tRange(t);return r&&r[0]<=d&&d<=r[1]&&daysOf(t.resp).includes(parse(d).getDay())};
 function laneLayout(list){const lanes=[];list.sort((a,b)=>tRange(a)[0]<tRange(b)[0]?-1:1);
@@ -964,12 +1039,12 @@ function renderGantt(body){
   const ti=diffD(v0,TODAY);
   const bg=(cls)=>days.map(d=>{const wd=parse(d).getDay();return '<div class="daycell'+(wd===0||wd===6?' we':'')+(cls?cls(d,wd):'')+'"></div>'}).join('');
   // linha de entregas
-  const dls=planDeadlines().filter(p=>p.fim>=v0&&p.fim<=v1);let row=3;
+  const dls=planDeadlines().filter(x=>x.prazo>=v0&&x.prazo<=v1);let row=3;
   if(dls.length){
-    const lanes=[];dls.sort((a,b)=>a.fim<b.fim?-1:1).forEach(p=>{const s=diffD(v0,p.fim);const w=Math.ceil(((p.codigo||p.nome).length*7+16)/col);let li=lanes.findIndex(e=>e<s);if(li<0){li=lanes.length;lanes.push(s+w)}else lanes[li]=s+w;p._lane=li});
+    const lanes=[];dls.sort((a,b)=>a.prazo<b.prazo?-1:1).forEach(x=>{const s0=diffD(v0,x.prazo);const w=Math.ceil(((x.codigo||'').length*7+16)/col);let li=lanes.findIndex(e=>e<s0);if(li<0){li=lanes.length;lanes.push(s0+w)}else lanes[li]=s0+w;x._lane=li});
     const hg=Math.max(44,lanes.length*20+8);
-    h+='<div class="namecell" style="grid-row:'+row+';height:'+hg+'px"><b style="font-size:13px">Entregas</b><small>prazos dos projetos</small></div><div class="rowbg flagrow" style="grid-column:2/-1;grid-row:'+row+';height:'+hg+'px;grid-template-columns:repeat('+N+',var(--col))">'+bg()+
-      dls.map(p=>'<span class="fl'+(p.sit==='finalizado'?' done':'')+'" data-p="'+p.id+'" title="'+esc(projLabel(p)+' — entrega '+brY(p.fim))+'" style="left:calc('+diffD(v0,p.fim)+' * var(--col) + var(--col)/2 - 5px);top:'+(4+p._lane*20)+'px">'+esc(p.codigo||p.nome)+'</span>').join('')+'</div>';row++}
+    h+='<div class="namecell" style="grid-row:'+row+';height:'+hg+'px"><b style="font-size:13px">Entregas</b><small>prazos das disciplinas</small></div><div class="rowbg flagrow" style="grid-column:2/-1;grid-row:'+row+';height:'+hg+'px;grid-template-columns:repeat('+N+',var(--col))">'+bg()+
+      dls.map(x=>'<span class="fl'+(x.sit==='finalizado'?' done':'')+'" data-pd="'+x.id+'" title="'+esc(pdLabel(x)+' — '+projLabel(PR(x.proj))+' — entrega '+brY(x.prazo))+'" style="left:calc('+diffD(v0,x.prazo)+' * var(--col) + var(--col)/2 - 5px);top:'+(4+x._lane*20)+'px">'+esc(x.codigo)+'</span>').join('')+'</div>';row++}
   users.forEach(u=>{
     const mine=tasks.filter(t=>t.resp===u.id&&tRange(t)).filter(t=>{const[s,e]=tRange(t);return e>=v0&&s<=v1});
     const lanes=laneLayout(mine);const hg=lanes*34+14;
@@ -980,19 +1055,19 @@ function renderGantt(body){
     days.forEach((d,k)=>{if(!u.dias.includes(parse(d).getDay())||d<TODAY)return;const n=openAll.filter(t=>activeOn(t,d)).length;
       h+='<div class="load l'+Math.min(n,2)+'" title="'+br(d)+': '+(n?n+' tarefa'+(n>1?'s':''):'livre')+'" style="left:calc('+k+' * var(--col));width:var(--col)"></div>'});
     mine.forEach(t=>{const[s,e]=tRange(t);const si=Math.max(0,diffD(v0,s)),ei=Math.min(N-1,diffD(v0,e));const w=ei-si+1;const p=PR(t.proj);
-      h+='<div class="bar '+t.sit+(tVencida(t)?' late':'')+'" tabindex="0" role="button" data-t="'+t.id+'" title="'+esc(t.titulo+' — '+projLabel(p)+' ('+SIT_T[t.sit]+', '+br(s)+' a '+br(e)+')')+'" style="--prio:'+prioVar(t.prio)+';background-color:'+cliVar(p?.cli)+';left:calc('+si+' * var(--col) + 2px);width:calc('+w+' * var(--col) - 4px);top:'+(4+t._lane*34)+'px">'+
-        '<span class="t">'+(t.sit==='concluida'?'✓ ':'')+esc(t.titulo)+'</span>'+(w*col>170?'<span class="s">'+esc(p?.codigo||'')+'</span>':'')+'</div>'});
+      h+='<div class="bar '+t.sit+(tVencida(t)?' late':'')+'" tabindex="0" role="button" data-t="'+t.id+'" title="'+esc(t.titulo+' — '+tLabel(t)+' ('+SIT_T[t.sit]+', '+br(s)+' a '+br(e)+')')+'" style="--prio:'+prioVar(t.prio)+';background-color:'+cliVar(p?.cli)+';left:calc('+si+' * var(--col) + 2px);width:calc('+w+' * var(--col) - 4px);top:'+(4+t._lane*34)+'px">'+
+        '<span class="t">'+(t.sit==='concluida'?'✓ ':'')+esc(t.titulo)+'</span>'+(w*col>170?'<span class="s">'+esc(tPD(t)?.codigo||'')+'</span>':'')+'</div>'});
     h+='</div>';row++});
   if(!users.length)h+='<div class="empty" style="grid-column:1/-1">Nenhum colaborador.</div>';
   h+='</div></div>';
   body.innerHTML=h;
   body.querySelectorAll('[data-t]').forEach(b=>{b.onclick=()=>openTask(b.dataset.t);b.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openTask(b.dataset.t)}}});
-  body.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{if(isCoord())openProj(b.dataset.p)});
+  body.querySelectorAll('[data-pd]').forEach(b=>b.onclick=()=>{const x=PDx(b.dataset.pd);if(isCoord()&&x)openProj(x.proj,x.id)});
 }
-function chip(t,showIni){const p=PR(t.proj);return '<button class="ch '+t.sit+'" data-t="'+t.id+'" title="'+esc(t.titulo+' — '+projLabel(p)+' — '+uname(t.resp)+' ('+SIT_T[t.sit]+')')+'" style="--prio:'+prioVar(t.prio)+';background:'+cliVar(p?.cli)+'">'+(showIni?'<span class="ini">'+esc(ini2(uname(t.resp)))+'</span>':'')+'<span>'+esc(t.titulo)+'</span></button>'}
-function dlChip(p){return '<button class="ch dl" data-p="'+p.id+'" title="Entrega: '+esc(projLabel(p))+'">⚑ <span>'+esc(p.codigo||p.nome)+'</span></button>'}
+function chip(t,showIni){const p=PR(t.proj);return '<button class="ch '+t.sit+'" data-t="'+t.id+'" title="'+esc(t.titulo+' — '+tLabel(t)+' — '+uname(t.resp)+' ('+SIT_T[t.sit]+')')+'" style="--prio:'+prioVar(t.prio)+';background:'+cliVar(p?.cli)+'">'+(showIni?'<span class="ini">'+esc(ini2(uname(t.resp)))+'</span>':'')+'<span>'+esc(t.titulo)+'</span></button>'}
+function dlChip(x){return '<button class="ch dl" data-pd="'+x.id+'" title="Entrega: '+esc(pdLabel(x)+' — '+projLabel(PR(x.proj)))+'">⚑ <span>'+esc(x.codigo)+'</span></button>'}
 function calCell(d,inMonth,max,showIni){
-  const T=planTasks().filter(t=>activeOn(t,d)).sort(sortT);const P=planDeadlines().filter(p=>p.fim===d);
+  const T=planTasks().filter(t=>activeOn(t,d)).sort(sortT);const P=planDeadlines().filter(x=>x.prazo===d);
   const items=P.map(dlChip).concat(T.map(t=>chip(t,showIni)));
   const lim=max||99;
   return '<div class="day'+(inMonth?'':' out')+(d===TODAY?' td':'')+'"><div class="dn"><b>'+parse(d).getDate()+'</b>'+(T.length>1&&isCoord()&&!PL.f.user?'<span class="small" title="tarefas no dia">'+T.length+'</span>':'')+'</div>'+
@@ -1016,19 +1091,19 @@ function renderWeek(body){
 }
 function renderDay(body){
   const d=PL.anchor,wd=parse(d).getDay();document.getElementById('plRange').textContent=WDL[wd]+', '+brY(d);
-  const T=planTasks().filter(t=>activeOn(t,d));const P=planDeadlines().filter(p=>p.fim===d);
+  const T=planTasks().filter(t=>activeOn(t,d));const P=planDeadlines().filter(x=>x.prazo===d);
   let h='<div class="panel">'+(P.length?'<div class="actions" style="margin-bottom:12px"><span class="lbl">Entregas do dia</span>'+P.map(p=>'<span style="max-width:240px">'+dlChip(p)+'</span>').join('')+'</div>':'')+'<div class="daylist">';
   const free=[];
   planUsers().forEach(u=>{const L=T.filter(t=>t.resp===u.id).sort(sortT);const works=u.dias.includes(wd);
     if(works&&!L.length)free.push(u.nome);
     h+='<div class="dperson"><div style="display:flex;justify-content:space-between;align-items:center"><b>'+esc(u.nome)+'</b>'+(!works?'<span class="small muted">não trabalha neste dia</span>':L.length>1?'<span class="pill warn">'+L.length+' em paralelo</span>':L.length?'':'<span class="pill ok">livre</span>')+'</div>'+
-      L.map(t=>chip(t,false).replace('</span></button>','</span></button><div class="small muted" style="margin:-2px 0 4px 6px">'+esc(projLabel(PR(t.proj)))+' · '+SIT_T[t.sit]+(t.fim?' · até '+br(t.fim):'')+'</div>')).join('')+'</div>'});
+      L.map(t=>chip(t,false).replace('</span></button>','</span></button><div class="small muted" style="margin:-2px 0 4px 6px">'+esc(tLabel(t))+' · '+SIT_T[t.sit]+(t.fim?' · até '+br(t.fim):'')+'</div>')).join('')+'</div>'});
   h+='</div>'+(isCoord()&&free.length?'<p class="small" style="margin:12px 0 0"><b>Disponíveis para nova atribuição:</b> '+esc(free.join(', '))+'</p>':'')+'</div>';
   body.innerHTML=h;bindCal(body);
 }
 function bindCal(body){
   body.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>openTask(b.dataset.t));
-  body.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{if(isCoord())openProj(b.dataset.p)});
+  body.querySelectorAll('[data-pd]').forEach(b=>b.onclick=()=>{const x=PDx(b.dataset.pd);if(isCoord()&&x)openProj(x.proj,x.id)});
   body.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>{PL.cal='dia';PL.anchor=b.dataset.day;renderMain()});
 }
 
@@ -1041,16 +1116,16 @@ function renderTarefas(el){
   let h='<div class="toolbar"><input id="tfQ" type="search" placeholder="Buscar tarefa ou projeto" value="'+esc(TF.q)+'" style="max-width:240px">'+
     '<select id="tfCli">'+opts(S.clientes.map(c=>[c.id,c.nome]),TF.cli,'Todos os clientes')+'</select>'+
     '<select id="tfEmp">'+opts(S.emps.filter(e=>!TF.cli||e.cli===TF.cli).map(e=>[e.id,e.nome]),TF.emp,'Todos os empreendimentos')+'</select>'+
-    '<select id="tfProj">'+projOptions(TF.proj).replace('Selecione o projeto…','Todos os projetos')+'</select>'+
+    '<select id="tfProj">'+projOptions(TF.proj,true).replace('Selecione o projeto…','Todos os projetos')+'</select>'+
     (coord?'<select id="tfResp">'+opts(ativos().map(u=>[u.id,u.nome]),TF.resp,'Todos os responsáveis')+'</select>':'')+
     '<select id="tfSit"><option value="abertas"'+(TF.sit==='abertas'?' selected':'')+'>Sem as concluídas</option><option value=""'+(TF.sit===''?' selected':'')+'>Todas as situações</option>'+SIT_T_ORD.map(s=>'<option value="'+s+'"'+(TF.sit===s?' selected':'')+'>'+SIT_T[s]+'</option>').join('')+'</select>'+
     '<select id="tfPrio">'+opts(Object.entries(PRIO),TF.prio,'Todas as prioridades')+'</select><span class="sp"></span>'+(coord?'<button class="btn primary" id="tfNova">+ Nova tarefa</button>':'')+'</div>';
   const q=TF.q.toLowerCase();
   const L=visibleTasks().filter(t=>{const p=PR(t.proj);if(TF.cli&&p?.cli!==TF.cli)return false;if(TF.emp&&p?.emp!==TF.emp)return false;if(TF.proj&&t.proj!==TF.proj)return false;if(TF.resp&&t.resp!==TF.resp)return false;if(TF.prio&&t.prio!=TF.prio)return false;
     if(TF.sit==='abertas'&&t.sit==='concluida')return false;if(TF.sit&&TF.sit!=='abertas'&&t.sit!==TF.sit)return false;
-    if(q&&!(t.titulo+' '+projLabel(p)+' '+(EM(p?.emp)?.nome||'')).toLowerCase().includes(q))return false;return true}).sort(sortT);
-  h+='<div class="card"><div class="tblwrap"><table><thead><tr><th>Prioridade</th><th>Tarefa</th><th>Projeto / empreendimento</th>'+(coord?'<th>Responsável</th>':'')+'<th>Situação</th><th class="n">Previsto</th><th>Onde parei</th></tr></thead><tbody>'+
-    (L.length?L.map(t=>{const p=PR(t.proj);return '<tr class="click" data-t="'+t.id+'"><td>'+prioPill(t.prio)+'</td><td><b>'+esc(t.titulo)+'</b></td><td><span class="sw" style="background:'+cliVar(p?.cli)+';vertical-align:-1px"></span> '+esc(projLabel(p))+'<br><span class="small muted">'+esc(EM(p?.emp)?.nome||'')+'</span></td>'+(coord?'<td>'+esc(uname(t.resp))+'</td>':'')+'<td>'+sitPill(t.sit)+'</td><td class="n"'+(tVencida(t)?' style="color:var(--bad);font-weight:600"':'')+'>'+br(t.ini)+'–'+br(t.fim)+'</td><td class="small muted" style="max-width:280px">'+esc((t.onde||'').slice(0,110))+(t.onde&&t.onde.length>110?'…':'')+'</td></tr>'}).join(''):'<tr><td colspan="7" class="empty">Nenhuma tarefa com esses filtros.</td></tr>')+'</tbody></table></div></div>';
+    if(q&&!(t.titulo+' '+tLabel(t)+' '+projLabel(p)+' '+(DI(tPD(t)?.disc)?.nome||'')).toLowerCase().includes(q))return false;return true}).sort(sortT);
+  h+='<div class="card"><div class="tblwrap"><table><thead><tr><th>Prioridade</th><th>Tarefa</th><th>Disciplina / projeto</th>'+(coord?'<th>Responsável</th>':'')+'<th>Situação</th><th class="n">Previsto</th><th>Onde parei</th></tr></thead><tbody>'+
+    (L.length?L.map(t=>{const p=PR(t.proj);return '<tr class="click" data-t="'+t.id+'"><td>'+prioPill(t.prio)+'</td><td><b>'+esc(t.titulo)+'</b></td><td><span class="sw" style="background:'+cliVar(p?.cli)+';vertical-align:-1px"></span> '+'<span class="mono small">'+esc(tPD(t)?.codigo||'')+'</span> '+esc(DI(tPD(t)?.disc)?.nome||'')+'<br><span class="small muted">'+esc(projLabel(p))+'</span></td>'+(coord?'<td>'+esc(uname(t.resp))+'</td>':'')+'<td>'+sitPill(t.sit)+'</td><td class="n"'+(tVencida(t)?' style="color:var(--bad);font-weight:600"':'')+'>'+br(t.ini)+'–'+br(t.fim)+'</td><td class="small muted" style="max-width:280px">'+esc((t.onde||'').slice(0,110))+(t.onde&&t.onde.length>110?'…':'')+'</td></tr>'}).join(''):'<tr><td colspan="7" class="empty">Nenhuma tarefa com esses filtros.</td></tr>')+'</tbody></table></div></div>';
   el.innerHTML=h;
   el.querySelectorAll('[data-t]').forEach(r=>r.onclick=()=>openTask(r.dataset.t));
   const nv=el.querySelector('#tfNova');if(nv)nv.onclick=()=>openTask(null,{proj:TF.proj,resp:TF.resp});
@@ -1063,27 +1138,41 @@ function renderTarefas(el){
 // =====================================================================
 let PF2={q:'',sit:'',cli:'',resp:''};
 function renderProjetos(el){
-  let h='<div class="toolbar"><input id="prQ" type="search" placeholder="Buscar cliente, empreendimento ou projeto" value="'+esc(PF2.q)+'" style="max-width:300px"><select id="prCli">'+opts(S.clientes.map(c=>[c.id,c.nome]),PF2.cli,'Todos os clientes')+'</select><select id="prResp">'+opts(ativos().map(u=>[u.id,u.nome]),PF2.resp,'Todos os responsáveis')+'</select><select id="prSit">'+opts(Object.entries(SIT_P),PF2.sit,'Todas as situações')+'</select><span class="sp"></span><button class="btn primary" id="prNovo">+ Novo projeto</button></div>';
+  let h='<div class="toolbar"><input id="prQ" type="search" placeholder="Buscar cliente, empreendimento ou disciplina" value="'+esc(PF2.q)+'" style="max-width:300px"><select id="prCli">'+opts(S.clientes.map(c=>[c.id,c.nome]),PF2.cli,'Todos os clientes')+'</select><select id="prResp">'+opts(ativos().map(u=>[u.id,u.nome]),PF2.resp,'Todos os responsáveis')+'</select><select id="prSit">'+opts(Object.entries(SIT_D),PF2.sit,'Todas as situações')+'</select><span class="sp"></span><button class="btn primary" id="prNovo">+ Novo projeto</button></div>';
   const q=PF2.q.toLowerCase();let rows='';
-  S.clientes.filter(c=>!PF2.cli||c.id===PF2.cli).forEach(c=>{S.emps.filter(e=>e.cli===c.id).forEach(e=>{
-    const ps=S.projetos.filter(p=>p.emp===e.id&&(!PF2.sit||p.sit===PF2.sit)&&(!PF2.resp||p.resp===PF2.resp)&&(!q||(c.nome+' '+e.nome+' '+projLabel(p)).toLowerCase().includes(q)));if(!ps.length)return;
-    rows+='<tr class="grp"><td colspan="8"><span class="sw" style="background:'+cliVar(c.id)+';vertical-align:-1px"></span> '+esc(c.nome)+' › '+esc(e.nome)+'</td></tr>';
-    ps.forEach(p=>{const ts=projTasks(p.id),dn=ts.filter(t=>t.sit==='concluida').length;
-      rows+='<tr class="click" data-p="'+p.id+'"><td class="mono small">'+esc(p.codigo)+'</td><td><b>'+esc(p.nome)+'</b>'+(p.sit==='parado'?'<br><span class="small" style="color:var(--warn)">'+esc(p.motivo)+'</span>':'')+'</td><td>'+esc(DI(p.disc)?.nome||'')+'</td><td>'+esc(TI(p.tipo)?.nome||'')+'</td><td>'+esc(uname(p.resp))+'</td><td class="n"'+(pVencido(p)?' style="color:var(--bad);font-weight:600"':'')+'>'+brY(p.fim)+'</td><td>'+SIT_P[p.sit]+'</td><td class="n">'+dn+'/'+ts.length+'</td></tr>'})})});
-  h+='<div class="card"><div class="tblwrap"><table><thead><tr><th>Código</th><th>Projeto</th><th>Disciplina</th><th>Tipo</th><th>Responsável</th><th class="n">Entrega</th><th>Situação</th><th class="n">Tarefas</th></tr></thead><tbody>'+(rows||'<tr><td colspan="8" class="empty">Nenhum projeto encontrado.</td></tr>')+'</tbody></table></div></div>';
+  S.clientes.filter(c=>!PF2.cli||c.id===PF2.cli).forEach(c=>{
+    S.projetos.filter(p=>p.cli===c.id).sort((a,b)=>projLabel(a).localeCompare(projLabel(b))).forEach(p=>{
+      const all=projPds(p.id);const pds=all.filter(x=>(!PF2.sit||x.sit===PF2.sit)&&(!PF2.resp||x.resp===PF2.resp));
+      if(q&&!(c.nome+' '+projLabel(p)+' '+all.map(x=>x.codigo+' '+(DI(x.disc)?.nome||'')).join(' ')).toLowerCase().includes(q))return;
+      if((PF2.sit||PF2.resp)&&!pds.length)return;
+      const sib=S.projetos.filter(o=>o.emp===p.emp);
+      rows+='<tr class="grp click" data-p="'+p.id+'"><td colspan="7"><span class="sw" style="background:'+cliVar(c.id)+';vertical-align:-1px"></span> '+esc(c.nome)+' › '+esc(projLabel(p))+' <span class="small muted" style="font-family:var(--f-ui);font-weight:500;letter-spacing:0">· '+esc(TI(p.tipo)?.nome||'')+'</span>'+
+        (sib.length>1&&sib[0]===p?' <button class="btn sm" type="button" data-merge="'+p.emp+'" style="margin-left:8px">Juntar os '+sib.length+' projetos de '+esc(EM(p.emp)?.nome||'')+'</button>':'')+'</td></tr>';
+      rows+=pds.map(x=>{const ts=pdTasks(x.id),dn=ts.filter(t=>t.sit==='concluida').length;
+        return '<tr class="click" data-pd="'+x.id+'"><td class="mono small">'+esc(x.codigo)+'</td><td><b>'+esc(DI(x.disc)?.nome||'')+'</b>'+(x.sit==='parado'&&x.motivo?'<br><span class="small" style="color:var(--warn)">'+esc(x.motivo)+'</span>':'')+'</td><td>'+esc(pdTipo(x)?.nome||'')+'</td><td>'+esc(uname(x.resp))+'</td><td class="n"'+(pdVencido(x)?' style="color:var(--bad);font-weight:600"':'')+'>'+brY(x.prazo)+'</td><td>'+SIT_D[x.sit]+'</td><td class="n">'+dn+'/'+ts.length+'</td></tr>'}).join('');
+      if(!all.length)rows+='<tr class="click" data-p="'+p.id+'"><td colspan="7" class="small muted">Sem disciplinas. Clique para incluir.</td></tr>';
+    })});
+  h+='<div class="card"><div class="tblwrap"><table><thead><tr><th>Código</th><th>Disciplina</th><th>Tipo</th><th>Responsável</th><th class="n">Entrega</th><th>Situação</th><th class="n">Tarefas</th></tr></thead><tbody>'+(rows||'<tr><td colspan="7" class="empty">Nenhum projeto encontrado.</td></tr>')+'</tbody></table></div></div>';
   el.innerHTML=h;
-  el.querySelectorAll('[data-p]').forEach(r=>r.onclick=()=>openProj(r.dataset.p));
+  el.querySelectorAll('tr[data-p]').forEach(r=>r.onclick=e=>{if(e.target.closest('[data-merge]'))return;openProj(r.dataset.p)});
+  el.querySelectorAll('tr[data-pd]').forEach(r=>r.onclick=()=>{const x=PDx(r.dataset.pd);if(x)openProj(x.proj,x.id)});
+  el.querySelectorAll('[data-merge]').forEach(b=>b.onclick=e=>{e.stopPropagation();if(!b.dataset.armed){b.dataset.armed=1;b.textContent='Confirmar: juntar disciplinas e tarefas num projeto só';return}mergeEmp(b.dataset.merge)});
   el.querySelector('#prNovo').onclick=()=>openProj(null);
   el.querySelector('#prSit').onchange=e=>{PF2.sit=e.target.value;renderMain()};el.querySelector('#prCli').onchange=e=>{PF2.cli=e.target.value;renderMain()};el.querySelector('#prResp').onchange=e=>{PF2.resp=e.target.value;renderMain()};
   const qi=el.querySelector('#prQ');qi.oninput=()=>{PF2.q=qi.value;clearTimeout(qi._t);qi._t=setTimeout(()=>{renderMain();const n=document.getElementById('prQ');n.focus();n.setSelectionRange(n.value.length,n.value.length)},250)};
 }
+function mergeEmp(empId){
+  const ps=S.projetos.filter(p=>p.emp===empId);if(ps.length<2)return;const tgt=ps[0];
+  ps.slice(1).forEach(o=>{S.pdiscs.forEach(x=>{if(x.proj===o.id)x.proj=tgt.id});S.tarefas.forEach(t=>{if(t.proj===o.id)t.proj=tgt.id});
+    if(o.obs)tgt.obs=(tgt.obs?tgt.obs+'\n':'')+o.obs;if(!tgt.cat&&o.cat)tgt.cat=o.cat;if(!Array.isArray(tgt.hist))tgt.hist=[];log(tgt,'edicao','Juntou a este projeto as disciplinas de outro cadastro do mesmo empreendimento')});
+  const ids=new Set(ps.slice(1).map(o=>o.id));S.projetos=S.projetos.filter(p=>!ids.has(p.id));save();render();toast('Projetos juntados em um só')}
 
 // =====================================================================
 // COORDENAÇÃO — indicadores
 // =====================================================================
 let CF={user:'',cli:'',emp:'',proj:'',disc:'',de:addI(TODAY,-60),ate:addI(TODAY,30),sit:''};
 function coordTasks(){return S.tarefas.filter(t=>{const p=PR(t.proj);if(!p)return false;
-  if(CF.user&&t.resp!==CF.user)return false;if(CF.cli&&p.cli!==CF.cli)return false;if(CF.emp&&p.emp!==CF.emp)return false;if(CF.proj&&t.proj!==CF.proj)return false;if(CF.disc&&p.disc!==CF.disc)return false;if(CF.sit&&t.sit!==CF.sit)return false;
+  if(CF.user&&t.resp!==CF.user)return false;if(CF.cli&&p.cli!==CF.cli)return false;if(CF.emp&&p.emp!==CF.emp)return false;if(CF.proj&&t.proj!==CF.proj)return false;if(CF.disc&&tPD(t)?.disc!==CF.disc)return false;if(CF.sit&&t.sit!==CF.sit)return false;
   const r=tRange(t);if(r&&CF.de&&r[1]<CF.de)return false;if(r&&CF.ate&&r[0]>CF.ate)return false;return true})}
 function renderCoord(el){
   const T=coordTasks();
@@ -1119,10 +1208,10 @@ function renderCoord(el){
      const dv=dp!=null&&dr!=null?dr-dp:null;const dt=t.fimExec&&t.fimBase?diffD(t.fimBase,t.fimExec):null;
      const st=t.fimExec?(tForaPrazo(t)?'<span class="pill bad">fora do prazo</span>':'<span class="pill ok">no prazo</span>'):tVencida(t)?'<span class="pill bad">vencida</span>':t.iniReal?'<span class="pill">em execução</span>':'<span class="pill">não iniciada</span>';
      const sg=v=>v==null?'—':(v>0?'+':'')+v;const cl=v=>v>0?' style="color:var(--bad);font-weight:600"':v<0?' style="color:var(--ok)"':'';
-     return '<tr class="click" data-t="'+t.id+'"><td><b>'+esc(t.titulo)+'</b><br><span class="small muted">'+esc(projLabel(PR(t.proj)))+'</span></td><td>'+esc(uname(t.resp))+(t.hist.some(x=>x.k==='resp')?' <span class="small muted" title="Houve troca de responsável">↻</span>':'')+'</td><td class="n">'+br(t.iniBase)+'</td><td class="n">'+br(t.fimBase)+'</td><td class="n">'+br(t.iniReal)+'</td><td class="n">'+br(t.fimExec)+'</td><td class="n">'+(dp??'—')+'</td><td class="n">'+(dr??'—')+'</td><td class="n"'+(dv!=null?cl(dv):'')+'>'+sg(dv)+'</td><td class="n"'+(dt!=null?cl(dt):'')+'>'+sg(dt)+'</td><td>'+st+'</td></tr>'}).join(''):'<tr><td colspan="11" class="empty">Nenhuma tarefa no filtro.</td></tr>')+'</tbody></table></div></div>';
+     return '<tr class="click" data-t="'+t.id+'"><td><b>'+esc(t.titulo)+'</b><br><span class="small muted">'+esc(tLabel(t))+'</span></td><td>'+esc(uname(t.resp))+(t.hist.some(x=>x.k==='resp')?' <span class="small muted" title="Houve troca de responsável">↻</span>':'')+'</td><td class="n">'+br(t.iniBase)+'</td><td class="n">'+br(t.fimBase)+'</td><td class="n">'+br(t.iniReal)+'</td><td class="n">'+br(t.fimExec)+'</td><td class="n">'+(dp??'—')+'</td><td class="n">'+(dr??'—')+'</td><td class="n"'+(dv!=null?cl(dv):'')+'>'+sg(dv)+'</td><td class="n"'+(dt!=null?cl(dt):'')+'>'+sg(dt)+'</td><td>'+st+'</td></tr>'}).join(''):'<tr><td colspan="11" class="empty">Nenhuma tarefa no filtro.</td></tr>')+'</tbody></table></div></div>';
   // atrasos
   const atr=T.filter(t=>tVencida(t)||tForaPrazo(t)).sort((a,b)=>(a.fim||'')<(b.fim||'')?-1:1);
-  h+='<div class="card panel"><h3>Acompanhamento de atrasos</h3>'+(atr.length?'<div class="tblwrap"><table><thead><tr><th>Tarefa</th><th>Responsável</th><th>Situação</th><th class="n">Término prev.</th><th class="n">Dias de atraso</th></tr></thead><tbody>'+atr.map(t=>{const ref=t.fimExec||TODAY;return '<tr class="click" data-t="'+t.id+'"><td><b>'+esc(t.titulo)+'</b> <span class="small muted">'+esc(PR(t.proj)?.codigo||'')+'</span></td><td>'+esc(uname(t.resp))+'</td><td>'+sitPill(t.sit)+'</td><td class="n">'+br(t.fimBase||t.fim)+'</td><td class="n" style="color:var(--bad);font-weight:600">'+diffD(t.fimBase||t.fim,ref)+'</td></tr>'}).join('')+'</tbody></table></div>':'<p class="small muted">Nenhum atraso no filtro.</p>')+'</div></div>';
+  h+='<div class="card panel"><h3>Acompanhamento de atrasos</h3>'+(atr.length?'<div class="tblwrap"><table><thead><tr><th>Tarefa</th><th>Responsável</th><th>Situação</th><th class="n">Término prev.</th><th class="n">Dias de atraso</th></tr></thead><tbody>'+atr.map(t=>{const ref=t.fimExec||TODAY;return '<tr class="click" data-t="'+t.id+'"><td><b>'+esc(t.titulo)+'</b> <span class="small muted">'+esc(tPD(t)?.codigo||'')+'</span></td><td>'+esc(uname(t.resp))+'</td><td>'+sitPill(t.sit)+'</td><td class="n">'+br(t.fimBase||t.fim)+'</td><td class="n" style="color:var(--bad);font-weight:600">'+diffD(t.fimBase||t.fim,ref)+'</td></tr>'}).join('')+'</tbody></table></div>':'<p class="small muted">Nenhum atraso no filtro.</p>')+'</div></div>';
   el.innerHTML=h;
   el.querySelectorAll('[data-t]').forEach(r=>r.onclick=()=>openTask(r.dataset.t));
   [['cfUser','user'],['cfCli','cli'],['cfEmp','emp'],['cfProj','proj'],['cfDisc','disc'],['cfSit','sit'],['cfDe','de'],['cfAte','ate']].forEach(([i,k])=>{el.querySelector('#'+i).onchange=e=>{CF[k]=e.target.value;if(k==='cli'){CF.emp='';CF.proj=''}if(k==='emp')CF.proj='';renderMain()}});
@@ -1155,8 +1244,9 @@ function pairChart(done){
 const CAD=[
   {k:'clientes',t:'Clientes',f:[['nome','Nome completo','text'],['sigla','Sigla','text',90]],new:()=>({id:uid('c'),nome:'',sigla:'',cor:S.clientes.length%8}),uso:id=>S.emps.some(e=>e.cli===id)||S.projetos.some(p=>p.cli===id)},
   {k:'emps',t:'Empreendimentos',f:[['nome','Nome do empreendimento','text'],['sigla','Sigla','text',80],['cli','Cliente','cli']],new:()=>({id:uid('e'),nome:'',sigla:'',cli:S.clientes[0]?.id||''}),uso:id=>S.projetos.some(p=>p.emp===id)},
-  {k:'discs',t:'Disciplinas',f:[['nome','Disciplina','text'],['sigla','Código','text',90]],new:()=>({id:uid('d'),nome:'',sigla:''}),uso:id=>S.projetos.some(p=>p.disc===id)},
-  {k:'tipos',t:'Tipos de projeto',f:[['nome','Tipo','text']],new:()=>({id:uid('t'),nome:''}),uso:id=>S.projetos.some(p=>p.tipo===id)},
+  {k:'categorias',t:'Tipos de empreendimento',f:[['nome','Tipo','text']],new:()=>({id:uid('cat'),nome:''}),uso:id=>S.projetos.some(p=>p.cat===id)},
+  {k:'discs',t:'Disciplinas',f:[['nome','Disciplina','text'],['sigla','Código','text',90]],new:()=>({id:uid('d'),nome:'',sigla:''}),uso:id=>S.pdiscs.some(x=>x.disc===id)},
+  {k:'tipos',t:'Tipos de projeto',f:[['nome','Tipo','text']],new:()=>({id:uid('t'),nome:''}),uso:id=>S.projetos.some(p=>p.tipo===id)||S.pdiscs.some(x=>x.tipo===id)},
   {k:'modelos',t:'Modelos de tarefa',f:[['titulo','Título','text'],['desc','Descrição padrão','textarea'],['dur','D.u.','number',60]],new:()=>({id:uid('m'),titulo:'',desc:'',dur:2}),uso:()=>false}];
 function renderCad(el){
   el.innerHTML='<p class="note">Tudo o que for cadastrado aqui aparece nas listas de seleção de projetos e tarefas. As alterações são salvas ao sair do campo.</p><div class="cadgrid">'+CAD.map(c=>{
@@ -1242,7 +1332,7 @@ function render(){if(!S.me)return;renderWho();renderTabs();renderMain()}
 // ---------- pasta, entrada e configuração inicial ----------
 function authCard(h){clearView();document.getElementById('tabs').innerHTML='';document.getElementById('whoBox').hidden=true;
   document.getElementById('main').innerHTML='<div class="auth card panel">'+h+'</div>';const first=document.querySelector('.auth input');if(first)first.focus()}
-function enter(id){S.me=id;buildView();TAB='painel';render();setSync();maintenance()}
+function enter(id){S.me=id;buildView();TAB='painel';render();setSync();maintenance();migrate().then(m=>{if(m&&!dialogOpen())render()})}
 function logout(msg){setSess(null);showLogin(msg)}
 function gate(){
   if(FS.status==='unsupported')return;
@@ -1318,6 +1408,7 @@ function showRegister(){
 }
 const DEFAULT_CADS=()=>[
   ...[['Água','AGU'],['Esgoto','ESG'],['Drenagem','DRE'],['Terraplenagem','TER'],['Pavimentação','PAV'],['Sinalização','SIN'],['RIT','RIT'],['EIV','EIV'],['PGRS / PGRCC','PGR']].map(([nome,sigla])=>({c:'discs',id:uid('d'),op:'put',set:{nome,sigla}})),
+  ...['Loteamento','Condomínio de Lotes','Condomínio de Prédios'].map(nome=>({c:'categorias',id:uid('cat'),op:'put',set:{nome}})),
   ...['Legal','Executivo','Estudo / relatório'].map(nome=>({c:'tipos',id:uid('t'),op:'put',set:{nome}})),
   ...[['Levantamento e base topográfica','Montar base com levantamento planialtimétrico, curvas de nível e cadastro existente.',2],
     ['Lançamento da rede','Lançar traçado da rede sobre a base, com numeração de trechos e singularidades.',4],

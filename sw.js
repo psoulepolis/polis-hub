@@ -2,7 +2,7 @@
    A página do app é sempre buscada na internet quando há conexão (assim cada atualização
    publicada no GitHub chega na hora); sem internet, abre a última cópia guardada.
    Os DADOS não passam por aqui: ficam na pasta do servidor escolhida no app. */
-const CACHE="polis-hub-R03";
+const CACHE="polis-hub-R05";
 const ARQUIVOS=["./","./index.html","./manifest.webmanifest","./icon-192.png","./icon-512.png","./icon-maskable-512.png"];
 self.addEventListener("install",e=>{
   self.skipWaiting();
