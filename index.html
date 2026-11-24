@@ -252,7 +252,7 @@ button.sync{border:none;background:none;padding:0;color:var(--muted)}.sync{font-
 <body>
 
 <header class="top">
-  <div class="brand"><span class="logo" role="img" aria-label="Polis Hub"></span><small>Organização de trabalho · versão R05</small></div>
+  <div class="brand"><span class="logo" role="img" aria-label="Polis Hub"></span><small>Organização de trabalho · versão R06</small></div>
   <div class="who" id="whoBox" hidden><button class="sync" id="syncTag" type="button" aria-live="polite"></button><span class="role" id="roleTag"></span><b id="whoName" style="color:var(--fg)"></b><button class="btn sm" id="btnPasta" type="button">Pasta de dados</button><button class="btn sm" id="btnSenha" type="button">Minha senha</button><button class="btn sm" id="btnSair" type="button">Sair</button></div>
 </header>
 <nav class="tabs" role="tablist" id="tabs"></nav>
@@ -658,7 +658,7 @@ function taskCard(t,showWho){
   if(mine&&t.sit==='devolvida')acts='<button class="btn sm primary" data-act="start" data-id="'+t.id+'">Retomar</button>';
   if(mine&&t.sit==='andamento')acts='<button class="btn sm" data-act="onde" data-id="'+t.id+'">Onde parei</button><button class="btn sm conf" data-act="send" data-id="'+t.id+'">Enviar p/ conferência</button>';
   if(isCoord()&&t.sit==='conferencia')acts='<button class="btn sm conf" data-open="'+t.id+'">Conferir</button>';
-  const lastDev=t.sit==='devolvida'?[...t.hist].reverse().find(x=>x.k==='devolucao'):null;
+  const lastDev=t.sit==='devolvida'?[...(t.hist||[])].reverse().find(x=>x.k==='devolucao'):null;
   return '<div class="kcard" tabindex="0" role="button" data-open="'+t.id+'" style="--edge:'+prioVar(t.prio)+'">'+
     '<div class="r"><span class="sw" style="background:'+cliVar(p?.cli)+'" title="'+esc(CL(p?.cli)?.nome)+'"></span><span class="small mono muted" style="margin-right:auto">'+esc(x?.codigo||'')+' · '+esc(DI(x?.disc)?.nome||'')+'</span>'+prioPill(t.prio)+'</div>'+
     '<div class="t">'+esc(t.titulo)+'</div>'+
@@ -747,7 +747,7 @@ function openTask(id,preset,focus){
   const coord=isCoord(),mine=t.resp===S.me;const p=PR(t.proj),pd=PDx(t.pd);
   const canPlan=coord;const canExec=!isNew&&(mine||coord);
   const dlg=document.getElementById('dlg'),f=document.getElementById('dlgForm');dlg.classList.remove('wide');
-  const lastDev=t.sit==='devolvida'?[...t.hist].reverse().find(x=>x.k==='devolucao'):null;
+  const lastDev=t.sit==='devolvida'?[...(t.hist||[])].reverse().find(x=>x.k==='devolucao'):null;
   const dur=t.ini&&t.fim?wdBetween(t.ini,t.fim,daysOf(t.resp)):'';
   let h='<div class="dlg-h"><div style="min-width:0"><div class="ctx" id="tCtx">'+(p?esc(CL(p.cli)?.nome)+' › '+esc(projLabel(p))+(pd?' › '+esc(pdLabel(pd)):''):'Nova tarefa')+'</div>'+
     '<h2>'+(isNew?'Nova tarefa':esc(t.titulo))+'</h2>'+(isNew?'':'<div class="actions" style="margin-top:6px">'+sitPill(t.sit)+prioPill(t.prio)+(tVencida(t)?'<span class="pill bad">prazo vencido</span>':'')+'</div>')+'</div><button class="btn x" value="cancel" aria-label="Fechar">✕</button></div><div class="dlg-b">';
@@ -802,7 +802,7 @@ function openTask(id,preset,focus){
     if(a)h+='<div class="actions" style="margin-top:12px">'+a+'</div><div id="retZone"></div>';
     h+='</section>';
     // histórico
-    h+='<section class="sec"><h4>Histórico</h4><ul class="hist">'+[...t.hist].reverse().map(x=>'<li class="k-'+x.k+'"><time>'+brTs(x.ts)+'</time><b>'+esc(uname(x.u))+'</b> — '+esc(x.txt)+(x.det?'<span class="tx">'+esc(x.det)+'</span>':'')+'</li>').join('')+'</ul></section>';
+    h+='<section class="sec"><h4>Histórico</h4><ul class="hist">'+[...(t.hist||[])].reverse().map(x=>'<li class="k-'+x.k+'"><time>'+brTs(x.ts)+'</time><b>'+esc(uname(x.u))+'</b> — '+esc(x.txt)+(x.det?'<span class="tx">'+esc(x.det)+'</span>':'')+'</li>').join('')+'</ul></section>';
   }
   h+='</div><div class="dlg-f">';
   if(canPlan&&!isNew)h+='<span id="delZone"><button class="btn danger" type="button" id="tDel">Excluir</button></span>';
@@ -1208,7 +1208,7 @@ function renderCoord(el){
      const dv=dp!=null&&dr!=null?dr-dp:null;const dt=t.fimExec&&t.fimBase?diffD(t.fimBase,t.fimExec):null;
      const st=t.fimExec?(tForaPrazo(t)?'<span class="pill bad">fora do prazo</span>':'<span class="pill ok">no prazo</span>'):tVencida(t)?'<span class="pill bad">vencida</span>':t.iniReal?'<span class="pill">em execução</span>':'<span class="pill">não iniciada</span>';
      const sg=v=>v==null?'—':(v>0?'+':'')+v;const cl=v=>v>0?' style="color:var(--bad);font-weight:600"':v<0?' style="color:var(--ok)"':'';
-     return '<tr class="click" data-t="'+t.id+'"><td><b>'+esc(t.titulo)+'</b><br><span class="small muted">'+esc(tLabel(t))+'</span></td><td>'+esc(uname(t.resp))+(t.hist.some(x=>x.k==='resp')?' <span class="small muted" title="Houve troca de responsável">↻</span>':'')+'</td><td class="n">'+br(t.iniBase)+'</td><td class="n">'+br(t.fimBase)+'</td><td class="n">'+br(t.iniReal)+'</td><td class="n">'+br(t.fimExec)+'</td><td class="n">'+(dp??'—')+'</td><td class="n">'+(dr??'—')+'</td><td class="n"'+(dv!=null?cl(dv):'')+'>'+sg(dv)+'</td><td class="n"'+(dt!=null?cl(dt):'')+'>'+sg(dt)+'</td><td>'+st+'</td></tr>'}).join(''):'<tr><td colspan="11" class="empty">Nenhuma tarefa no filtro.</td></tr>')+'</tbody></table></div></div>';
+     return '<tr class="click" data-t="'+t.id+'"><td><b>'+esc(t.titulo)+'</b><br><span class="small muted">'+esc(tLabel(t))+'</span></td><td>'+esc(uname(t.resp))+((t.hist||[]).some(x=>x.k==='resp')?' <span class="small muted" title="Houve troca de responsável">↻</span>':'')+'</td><td class="n">'+br(t.iniBase)+'</td><td class="n">'+br(t.fimBase)+'</td><td class="n">'+br(t.iniReal)+'</td><td class="n">'+br(t.fimExec)+'</td><td class="n">'+(dp??'—')+'</td><td class="n">'+(dr??'—')+'</td><td class="n"'+(dv!=null?cl(dv):'')+'>'+sg(dv)+'</td><td class="n"'+(dt!=null?cl(dt):'')+'>'+sg(dt)+'</td><td>'+st+'</td></tr>'}).join(''):'<tr><td colspan="11" class="empty">Nenhuma tarefa no filtro.</td></tr>')+'</tbody></table></div></div>';
   // atrasos
   const atr=T.filter(t=>tVencida(t)||tForaPrazo(t)).sort((a,b)=>(a.fim||'')<(b.fim||'')?-1:1);
   h+='<div class="card panel"><h3>Acompanhamento de atrasos</h3>'+(atr.length?'<div class="tblwrap"><table><thead><tr><th>Tarefa</th><th>Responsável</th><th>Situação</th><th class="n">Término prev.</th><th class="n">Dias de atraso</th></tr></thead><tbody>'+atr.map(t=>{const ref=t.fimExec||TODAY;return '<tr class="click" data-t="'+t.id+'"><td><b>'+esc(t.titulo)+'</b> <span class="small muted">'+esc(tPD(t)?.codigo||'')+'</span></td><td>'+esc(uname(t.resp))+'</td><td>'+sitPill(t.sit)+'</td><td class="n">'+br(t.fimBase||t.fim)+'</td><td class="n" style="color:var(--bad);font-weight:600">'+diffD(t.fimBase||t.fim,ref)+'</td></tr>'}).join('')+'</tbody></table></div>':'<p class="small muted">Nenhum atraso no filtro.</p>')+'</div></div>';
@@ -1325,7 +1325,7 @@ function renderMain(){
   const el=document.getElementById('main');const m=me();
   if(m.status!=='ativo'){el.innerHTML='<div class="card locked" style="margin-top:14px"><h3>'+(m.status==='pendente'?'Aguardando autorização':'Acesso desativado')+'</h3><p class="muted">'+(m.status==='pendente'?'Seu pedido de acesso foi enviado. Assim que a coordenação autorizar, suas tarefas aparecem aqui.':'Fale com a coordenação para reativar seu acesso.')+'</p><p class="small muted">Para testar, troque para “Gestor” no seletor acima e autorize o pedido na aba Usuários.</p></div>';return}
   const tab=TABS.find(t=>t[0]===TAB);if(!tab||(tab[2]&&!isCoord()))TAB='painel';
-  ({painel:renderPainel,plan:renderPlan,tarefas:renderTarefas,projetos:renderProjetos,coord:renderCoord,cad:renderCad,users:renderUsers})[TAB](el);
+  try{({painel:renderPainel,plan:renderPlan,tarefas:renderTarefas,projetos:renderProjetos,coord:renderCoord,cad:renderCad,users:renderUsers})[TAB](el);}catch(e){console.error(e);el.innerHTML='<div class="card panel" style="margin-top:14px"><h3>Esta aba encontrou um erro</h3><p class="muted small">Tire um print e mande para a coordenação. As outras abas continuam funcionando.</p><pre style="white-space:pre-wrap;font-size:12px;user-select:text">'+esc(String((e&&(e.stack||e.message))||e).slice(0,1200))+'</pre></div>'}
 }
 function render(){if(!S.me)return;renderWho();renderTabs();renderMain()}
 
@@ -1476,11 +1476,23 @@ document.getElementById('btnSenha').onclick=()=>{
   const my=await idb.get('my:'+DEVICE);if(my){MY=my.events||[];MYSEQ=my.seq||0;MYDIRTY=!!my.dirty}
   const cache=await idb.get('cache:'+DEVICE);if(cache){BASE=cache.base||null;EVCACHE=cache.ev||{};MARK=cache.mark||null}
   FS.locs=(await idb.get('locs'))||[];
-  rebuild();
+  try{rebuild()}catch(e){console.error(e);BASE=null;EVCACHE={};rebuild()}
   if(!FS.locs.length){FS.status='none';return gate()}
   await fsConnect(false);
   gate();
-})();
+})().catch(showFatal);
+function showFatal(e){
+  console.error(e);
+  const msg=(e&&(e.stack||e.message))||String(e);
+  const main=document.getElementById('main');if(!main)return;
+  main.innerHTML='<div class="auth card panel" style="max-width:640px"><h3>O Polis Hub encontrou um erro ao abrir</h3><p class="muted" style="margin:6px 0 10px">Tente primeiro “Recarregar dados do servidor”. Se o erro continuar, tire um print desta tela e mande para a coordenação.</p>'+
+    '<pre style="white-space:pre-wrap;font-size:12px;background:var(--weekend);border:1px solid var(--line);border-radius:6px;padding:10px;max-height:220px;overflow:auto;user-select:text">'+esc(msg.slice(0,1500))+'</pre>'+
+    '<div class="actions" style="margin-top:12px"><button class="btn primary" type="button" id="fxCache">Recarregar dados do servidor</button><button class="btn" type="button" id="fxReload">Tentar de novo</button></div></div>';
+  document.getElementById('fxReload').onclick=()=>location.reload();
+  document.getElementById('fxCache').onclick=async()=>{try{await idb.set('cache:'+DEVICE,null)}catch(x){}location.reload()};
+}
+window.addEventListener('error',ev=>{const m=document.getElementById('main');if(m&&!m.children.length)showFatal(ev.error||ev.message)});
+window.addEventListener('unhandledrejection',ev=>{const m=document.getElementById('main');if(m&&!m.children.length)showFatal(ev.reason)});
 // app instalável: atualização automática
 if('serviceWorker' in navigator&&location.protocol==='https:'||location.hostname==='localhost'){
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').then(reg=>{
