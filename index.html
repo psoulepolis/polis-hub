@@ -146,6 +146,8 @@ td input,td select{border:1px solid var(--line);border-radius:5px;padding:5px 7p
 .bar.conferencia{background-image:repeating-linear-gradient(135deg,transparent 0 6px,rgba(123,79,184,.22) 6px 12px)}
 .bar.devolvida{box-shadow:0 0 0 2px var(--s-devolvida) inset}
 .bar.concluida{opacity:.5}
+.bar.pausada,.ch.pausada{opacity:.6;background-image:repeating-linear-gradient(45deg,transparent 0 6px,rgba(120,120,120,.28) 6px 9px)!important}
+.pill.pause{color:var(--warn)}
 .bar.late::after{content:"!";position:absolute;right:4px;font-family:var(--f-mono);color:var(--bad);font-weight:700}
 .bar:hover{border-color:var(--fg)}
 .flagrow .fl{position:absolute;top:5px;font-family:var(--f-mono);font-size:10.5px;font-weight:600;color:var(--bad);white-space:nowrap;cursor:pointer;display:flex;align-items:center;gap:3px;z-index:2}
@@ -252,7 +254,7 @@ button.sync{border:none;background:none;padding:0;color:var(--muted)}.sync{font-
 <body>
 
 <header class="top">
-  <div class="brand"><span class="logo" role="img" aria-label="Polis Hub"></span><small>Organização de trabalho · versão R07</small></div>
+  <div class="brand"><span class="logo" role="img" aria-label="Polis Hub"></span><small>Organização de trabalho · versão R08</small></div>
   <div class="who" id="whoBox" hidden><button class="sync" id="syncTag" type="button" aria-live="polite"></button><span class="role" id="roleTag"></span><b id="whoName" style="color:var(--fg)"></b><button class="btn sm" id="btnPasta" type="button">Pasta de dados</button><button class="btn sm" id="btnSenha" type="button">Minha senha</button><button class="btn sm" id="btnSair" type="button">Sair</button></div>
 </header>
 <nav class="tabs" role="tablist" id="tabs"></nav>
@@ -611,7 +613,9 @@ const openSit=s=>s==='pendente'||s==='andamento'||s==='devolvida';
 function tRange(t){const s=t.iniReal||t.ini;if(!s)return null;let e;
   if(t.fimExec)e=t.fimExec;else if(t.iniReal)e=(t.fim&&t.fim>TODAY)?t.fim:TODAY;else e=t.fim;
   if(!e||e<s)e=s;return [s,e]}
-const tVencida=t=>openSit(t.sit)&&t.fim&&t.fim<TODAY;
+const tPausada=t=>openSit(t.sit)&&pdStored(PDx(t.pd))==='parado';
+const tVencida=t=>openSit(t.sit)&&t.fim&&t.fim<TODAY&&!tPausada(t);
+function shiftWd(d,n,days){if(!d||n<=0)return d;let x=parse(d),c=0,g=0;while(c<n&&g++<2000){x=addD(x,1);if(days.includes(x.getDay()))c++}return iso(x)}
 const tForaPrazo=t=>(t.fimExec&&t.fimBase&&t.fimExec>t.fimBase);
 function sitPill(s){return '<span class="chip-s" style="color:'+sitVar(s)+'"><i class="dot" style="background:'+sitVar(s)+'"></i>'+SIT_T[s]+'</span>'}
 function prioPill(p){return '<span class="pill" style="color:'+prioVar(p)+'">'+PRIO[p]+'</span>'}
@@ -669,11 +673,13 @@ function taskCard(t,showWho){
   if(mine&&t.sit==='devolvida')acts='<button class="btn sm primary" data-act="start" data-id="'+t.id+'">Retomar</button>';
   if(mine&&t.sit==='andamento')acts='<button class="btn sm" data-act="onde" data-id="'+t.id+'">Onde parei</button><button class="btn sm conf" data-act="send" data-id="'+t.id+'">Enviar p/ conferência</button>';
   if(isCoord()&&t.sit==='conferencia')acts='<button class="btn sm conf" data-open="'+t.id+'">Conferir</button>';
+  const pausa=tPausada(t);if(pausa)acts='';
   const lastDev=t.sit==='devolvida'?[...(t.hist||[])].reverse().find(x=>x.k==='devolucao'):null;
   return '<div class="kcard" tabindex="0" role="button" data-open="'+t.id+'" style="--edge:'+prioVar(t.prio)+'">'+
     '<div class="r"><span class="sw" style="background:'+cliVar(p?.cli)+'" title="'+esc(CL(p?.cli)?.nome)+'"></span><span class="small mono muted" style="margin-right:auto">'+esc(x?.codigo||'')+' · '+esc(DI(x?.disc)?.nome||'')+'</span>'+prioPill(t.prio)+'</div>'+
     '<div class="t">'+esc(t.titulo)+'</div>'+(ET(t.etapa)?'<div class="small" style="color:var(--accent);font-weight:600">'+esc(ET(t.etapa).nome)+'</div>':'')+
     '<div class="m">'+esc(projLabel(p))+' · '+esc(CL(p?.cli)?.nome||'')+'</div>'+
+    (pausa?'<div class="q" style="border-left-color:var(--warn);color:var(--warn)">Pausada: disciplina parada'+(x&&x.motivo?' · '+esc(x.motivo):'')+'</div>':'')+
     (lastDev?'<div class="q" style="border-left-color:var(--s-devolvida);color:var(--s-devolvida)">'+esc(lastDev.det)+'</div>':t.onde&&t.sit!=='concluida'?'<div class="q">'+esc(t.onde)+'</div>':'')+
     '<div class="r"><span class="mono small'+(venc?'" style="color:var(--bad);font-weight:600':'')+'">'+(t.fim?'até '+br(t.fim):'sem data')+(venc?' · vencida':'')+'</span>'+(showWho?'<span class="small"><b>'+esc(uname(t.resp))+'</b></span>':'')+(showWho?'':sitPill(t.sit))+'</div>'+
     (acts?'<div class="acts">'+acts+'</div>':'')+'</div>';
@@ -732,8 +738,30 @@ function bindProjDrag(el){
       if(open){toast('Esta disciplina ainda tem tarefas em aberto. Ela fica em desenvolvimento até as tarefas serem concluídas.');return}
       setPdSit(x,s);save();render();toast(pdLabel(x)+': '+SIT_D[s])}});
 }
-function setPdSit(x,s,motivo){const old=pdSit(x);x.sit=s;if(s==='parado')x.motivo=motivo||x.motivo;if(!Array.isArray(x.hist))x.hist=[];
-  const nw=pdSit(x);if(nw!==old)log(x,'situacao','Situação: '+(SIT_D[old]||'—')+' → '+SIT_D[nw],s==='parado'?x.motivo:'')}
+function setPdSit(x,s,motivo){const wasP=pdStored(x)==='parado',old=pdSit(x);x.sit=s;if(s==='parado')x.motivo=motivo||x.motivo;if(!Array.isArray(x.hist))x.hist=[];
+  const nw=pdSit(x);if(nw!==old)log(x,'situacao','Situação: '+(SIT_D[old]||'—')+' → '+SIT_D[nw],s==='parado'?x.motivo:'');
+  const abertas=pdTasks(x.id).filter(t=>openSit(t.sit));
+  if(s==='parado'&&!wasP){x.pausaEm=TODAY;abertas.forEach(t=>log(t,'situacao','Pausada: disciplina parada',x.motivo||''))}
+  if(wasP&&s!=='parado'){const desde=x.pausaEm||'';abertas.forEach(t=>log(t,'situacao','Retomada: disciplina voltou a andar'));x.pausaEm='';
+    if(abertas.length&&isCoord())setTimeout(()=>askReprog(x.id,desde),80)}}
+function askReprog(id,desde){
+  const x=PDx(id);if(!x)return;const d=document.getElementById('dlg2'),f=document.getElementById('dlg2Form');
+  if(d.open||document.getElementById('dlg').open){const w=()=>{if(!d.open&&!document.getElementById('dlg').open)askReprog(id,desde);else setTimeout(w,400)};setTimeout(w,400);return}
+  const ts=pdTasks(x.id).filter(t=>openSit(t.sit)&&(t.ini||t.fim));if(!ts.length)return;
+  const sug=desde&&desde<TODAY?Math.max(0,wdBetween(desde,addI(TODAY,-1),DEF_DAYS)):0;
+  const linhas=n=>ts.map(t=>{const dd=daysOf(t.resp);return '<tr><td><b>'+esc(t.titulo)+'</b><br><span class="small muted">'+esc(uname(t.resp))+'</span></td><td class="n">'+br(t.ini)+'–'+br(t.fim)+'</td><td class="n"><b>'+br(shiftWd(t.ini,n,dd))+'–'+br(shiftWd(t.fim,n,dd))+'</b></td></tr>'}).join('');
+  f.innerHTML='<div class="dlg-h"><div><div class="ctx">'+esc(pdLabel(x))+' · '+esc(projLabel(PR(x.proj)))+'</div><h2>Reprogramar as tarefas que estavam pausadas?</h2></div></div><div class="dlg-b">'+
+    '<p style="margin:0">'+(desde?'A disciplina ficou parada desde '+brY(desde)+'. ':'')+'As datas podem ser empurradas pelos dias úteis em que ficou parada.</p>'+
+    '<div class="f" style="max-width:220px"><label for="rpN">Empurrar em (dias úteis)</label><input id="rpN" type="number" min="0" value="'+sug+'"></div>'+
+    '<div class="tblwrap"><table><thead><tr><th>Tarefa</th><th class="n">Hoje</th><th class="n">Nova data</th></tr></thead><tbody id="rpRows">'+linhas(sug)+'</tbody></table></div>'+
+    '<p class="small muted" style="margin:0">Cada tarefa usa os dias de trabalho do seu responsável. Depois dá para ajustar uma a uma na janela da tarefa.</p></div>'+
+    '<div class="dlg-f"><span class="sp"></span><button class="btn" value="cancel">Manter as datas</button><button class="btn primary" type="button" id="rpOk">Reprogramar</button></div>';
+  const inp=f.querySelector('#rpN');inp.oninput=()=>{f.querySelector('#rpRows').innerHTML=linhas(Math.max(0,+inp.value||0))};
+  f.querySelector('#rpOk').onclick=()=>{const n=Math.max(0,+inp.value||0);if(!n){d.close();return}
+    ts.forEach(t=>{const dd=daysOf(t.resp),ni=shiftWd(t.ini,n,dd),nf=shiftWd(t.fim,n,dd);log(t,'prazo','Reprogramada após a pausa: '+br(t.ini)+'–'+br(t.fim)+' → '+br(ni)+'–'+br(nf));t.ini=ni;t.fim=nf});
+    save();d.close();render();toast(ts.length+' tarefa'+(ts.length>1?'s':'')+' reprogramada'+(ts.length>1?'s':''))};
+  d.showModal();
+}
 function reopenPd(id){const x=PDx(id);if(x&&pdStored(x))setPdSit(x,'')}
 function askDestino(id){
   const x=PDx(id);if(!x||!isCoord()||pdTasks(x.id).some(tAberta)||pdStored(x)==='encerrado')return;
@@ -773,7 +801,7 @@ function openTask(id,preset,focus){
   const lastDev=t.sit==='devolvida'?[...(t.hist||[])].reverse().find(x=>x.k==='devolucao'):null;
   const dur=t.ini&&t.fim?wdBetween(t.ini,t.fim,daysOf(t.resp)):'';
   let h='<div class="dlg-h"><div style="min-width:0"><div class="ctx" id="tCtx">'+(p?esc(CL(p.cli)?.nome)+' › '+esc(projLabel(p))+(pd?' › '+esc(pdLabel(pd)):''):'Nova tarefa')+'</div>'+
-    '<h2>'+(isNew?'Nova tarefa':esc(t.titulo))+'</h2>'+(isNew?'':'<div class="actions" style="margin-top:6px">'+sitPill(t.sit)+prioPill(t.prio)+(tVencida(t)?'<span class="pill bad">prazo vencido</span>':'')+'</div>')+'</div><button class="btn x" value="cancel" aria-label="Fechar">✕</button></div><div class="dlg-b">';
+    '<h2>'+(isNew?'Nova tarefa':esc(t.titulo))+'</h2>'+(isNew?'':'<div class="actions" style="margin-top:6px">'+sitPill(t.sit)+(tPausada(t)?'<span class="pill pause">Pausada</span>':'')+prioPill(t.prio)+(tVencida(t)?'<span class="pill bad">prazo vencido</span>':'')+'</div>')+'</div><button class="btn x" value="cancel" aria-label="Fechar">✕</button></div><div class="dlg-b">';
   // --- planejamento
   if(canPlan){
     h+='<section class="sec"><h4>Planejamento</h4><div class="fg">'+
@@ -805,6 +833,7 @@ function openTask(id,preset,focus){
   if(!isNew){
     const canEditExec=canExec&&t.sit!=='concluida';
     h+='<section class="sec exec"><h4>Execução'+(t.atualEm?'<span class="small muted" style="text-transform:none;letter-spacing:0;font-family:var(--f-ui);font-weight:500;margin-left:auto">última atualização: '+esc(uname(t.atualPor))+', '+brTs(t.atualEm)+'</span>':'')+'</h4>'+
+      (tPausada(t)?'<div class="callout" style="margin-bottom:10px;border-left-color:var(--warn)"><b style="color:var(--warn)">Pausada:</b> a disciplina '+esc(pdLabel(pd))+' está parada'+(pd&&pd.motivo?' ('+esc(pd.motivo)+')':'')+'. A tarefa volta quando a disciplina voltar a andar.</div>':'')+
       (lastDev?'<div class="callout" style="margin-bottom:10px"><b>Devolvida por '+esc(uname(lastDev.u))+' em '+brTs(lastDev.ts)+':</b> '+esc(lastDev.det)+'</div>':'')+
       '<div class="fg">'+
       '<div class="f full"><label for="tOnde">Andamento / onde parei</label><textarea id="tOnde" rows="3" '+(canEditExec?'':'disabled')+' placeholder="ex.: Rede principal dimensionada e lançada. Faltam conferência dos diâmetros e ajustes dos perfis.">'+esc(t.onde)+'</textarea></div>'+
@@ -814,13 +843,14 @@ function openTask(id,preset,focus){
       '</div>';
     if(t.aprovEm)h+='<p class="small" style="margin:10px 0 0">Aprovada por <b>'+esc(uname(t.aprovPor))+'</b> em '+brTs(t.aprovEm)+'.</p>';
     // ações
-    let a='';
-    if(canExec){
+    let a='';const pausa=tPausada(t);
+    if(canExec&&!pausa){
       if(t.sit==='pendente'||t.sit==='devolvida')a+='<button class="btn primary" type="button" id="aStart">'+(t.sit==='devolvida'?'Retomar execução':'Iniciar execução')+'</button>';
       if(t.sit==='andamento'||t.sit==='devolvida'||t.sit==='pendente')a+='<button class="btn" type="button" id="aSave">Salvar andamento</button>';
       if(t.sit==='andamento')a+='<button class="btn conf" type="button" id="aSend">Enviar para conferência</button>';
     }
-    if(coord&&(t.sit==='pendente'||t.sit==='andamento'||t.sit==='devolvida'))a+='<button class="btn ok" type="button" id="aDirect">Concluir (sem conferência)</button>';
+    if(canExec&&pausa)a+='<button class="btn" type="button" id="aSave">Salvar andamento</button>';
+    if(coord&&!pausa&&(t.sit==='pendente'||t.sit==='andamento'||t.sit==='devolvida'))a+='<button class="btn ok" type="button" id="aDirect">Concluir (sem conferência)</button>';
     if(coord&&t.sit==='conferencia')a+='<button class="btn ok" type="button" id="aApprove">Aprovar e concluir</button><button class="btn danger" type="button" id="aReturn">Devolver para ajustes</button>';
     if(coord&&t.sit==='concluida')a+='<button class="btn" type="button" id="aReopen">Reabrir tarefa</button>';
     if(!coord&&t.sit==='conferencia')a+='<span class="small muted">Enviada para conferência. A coordenação vai aprovar ou devolver.</span>';
@@ -1074,14 +1104,14 @@ function renderGantt(body){
   users.forEach(u=>{
     const mine=tasks.filter(t=>t.resp===u.id&&tRange(t)).filter(t=>{const[s,e]=tRange(t);return e>=v0&&s<=v1});
     const lanes=laneLayout(mine);const hg=lanes*34+14;
-    const openAll=S.tarefas.filter(t=>t.resp===u.id&&openSit(t.sit)&&tRange(t));
+    const openAll=S.tarefas.filter(t=>t.resp===u.id&&openSit(t.sit)&&!tPausada(t)&&tRange(t));
     h+='<div class="namecell" style="grid-row:'+row+';height:'+hg+'px"><b>'+esc(u.nome)+'</b><small>'+u.dias.map(x=>WDL[x]).join(' ')+' · '+u.horas+'h</small></div>';
     h+='<div class="rowbg" style="grid-column:2/-1;grid-row:'+row+';height:'+hg+'px;grid-template-columns:repeat('+N+',var(--col))">'+bg((d,wd)=>u.dias.includes(wd)?'':' off');
     if(ti>=0&&ti<N)h+='<div class="todayline" style="left:calc('+ti+' * var(--col) + var(--col)/2 - 1px)"></div>';
     days.forEach((d,k)=>{if(!u.dias.includes(parse(d).getDay())||d<TODAY)return;const n=openAll.filter(t=>activeOn(t,d)).length;
       h+='<div class="load l'+Math.min(n,2)+'" title="'+br(d)+': '+(n?n+' tarefa'+(n>1?'s':''):'livre')+'" style="left:calc('+k+' * var(--col));width:var(--col)"></div>'});
     mine.forEach(t=>{const[s,e]=tRange(t);const si=Math.max(0,diffD(v0,s)),ei=Math.min(N-1,diffD(v0,e));const w=ei-si+1;const p=PR(t.proj);
-      h+='<div class="bar '+t.sit+(tVencida(t)?' late':'')+'" tabindex="0" role="button" data-t="'+t.id+'" title="'+esc(t.titulo+' — '+tLabel(t)+' ('+SIT_T[t.sit]+', '+br(s)+' a '+br(e)+')')+'" style="--prio:'+prioVar(t.prio)+';background-color:'+cliVar(p?.cli)+';left:calc('+si+' * var(--col) + 2px);width:calc('+w+' * var(--col) - 4px);top:'+(4+t._lane*34)+'px">'+
+      h+='<div class="bar '+t.sit+(tPausada(t)?' pausada':'')+(tVencida(t)?' late':'')+'" tabindex="0" role="button" data-t="'+t.id+'" title="'+esc(t.titulo+' — '+tLabel(t)+' ('+(tPausada(t)?'pausada':SIT_T[t.sit])+', '+br(s)+' a '+br(e)+')')+'" style="--prio:'+prioVar(t.prio)+';background-color:'+cliVar(p?.cli)+';left:calc('+si+' * var(--col) + 2px);width:calc('+w+' * var(--col) - 4px);top:'+(4+t._lane*34)+'px">'+
         '<span class="t">'+(t.sit==='concluida'?'✓ ':'')+esc(t.titulo)+'</span>'+(w*col>170?'<span class="s">'+esc(tPD(t)?.codigo||'')+'</span>':'')+'</div>'});
     h+='</div>';row++});
   if(!users.length)h+='<div class="empty" style="grid-column:1/-1">Nenhum colaborador.</div>';
@@ -1090,7 +1120,7 @@ function renderGantt(body){
   body.querySelectorAll('[data-t]').forEach(b=>{b.onclick=()=>openTask(b.dataset.t);b.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openTask(b.dataset.t)}}});
   body.querySelectorAll('[data-pd]').forEach(b=>b.onclick=()=>{const x=PDx(b.dataset.pd);if(isCoord()&&x)openProj(x.proj,x.id)});
 }
-function chip(t,showIni){const p=PR(t.proj);return '<button class="ch '+t.sit+'" data-t="'+t.id+'" title="'+esc(t.titulo+' — '+tLabel(t)+' — '+uname(t.resp)+' ('+SIT_T[t.sit]+')')+'" style="--prio:'+prioVar(t.prio)+';background:'+cliVar(p?.cli)+'">'+(showIni?'<span class="ini">'+esc(ini2(uname(t.resp)))+'</span>':'')+'<span>'+esc(t.titulo)+'</span></button>'}
+function chip(t,showIni){const p=PR(t.proj);return '<button class="ch '+t.sit+(tPausada(t)?' pausada':'')+'" data-t="'+t.id+'" title="'+esc(t.titulo+' — '+tLabel(t)+' — '+uname(t.resp)+' ('+SIT_T[t.sit]+')')+'" style="--prio:'+prioVar(t.prio)+';background:'+cliVar(p?.cli)+'">'+(showIni?'<span class="ini">'+esc(ini2(uname(t.resp)))+'</span>':'')+'<span>'+esc(t.titulo)+'</span></button>'}
 function dlChip(x){return '<button class="ch dl" data-pd="'+x.id+'" title="Entrega: '+esc(pdLabel(x)+' — '+projLabel(PR(x.proj)))+'">⚑ <span>'+esc(x.codigo)+'</span></button>'}
 function calCell(d,inMonth,max,showIni){
   const T=planTasks().filter(t=>activeOn(t,d)).sort(sortT);const P=planDeadlines().filter(x=>x.prazo===d);
