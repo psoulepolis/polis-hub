@@ -252,7 +252,7 @@ button.sync{border:none;background:none;padding:0;color:var(--muted)}.sync{font-
 <body>
 
 <header class="top">
-  <div class="brand"><span class="logo" role="img" aria-label="Polis Hub"></span><small>Organização de trabalho · versão R06</small></div>
+  <div class="brand"><span class="logo" role="img" aria-label="Polis Hub"></span><small>Organização de trabalho · versão R07</small></div>
   <div class="who" id="whoBox" hidden><button class="sync" id="syncTag" type="button" aria-live="polite"></button><span class="role" id="roleTag"></span><b id="whoName" style="color:var(--fg)"></b><button class="btn sm" id="btnPasta" type="button">Pasta de dados</button><button class="btn sm" id="btnSenha" type="button">Minha senha</button><button class="btn sm" id="btnSair" type="button">Sair</button></div>
 </header>
 <nav class="tabs" role="tablist" id="tabs"></nav>
@@ -268,7 +268,7 @@ button.sync{border:none;background:none;padding:0;color:var(--muted)}.sync{font-
 const SIT_T={pendente:'Pendente',andamento:'Em execução',devolvida:'Devolvida',conferencia:'Aguardando conferência',concluida:'Concluída'};
 const SIT_SHORT={pendente:'Pend.',andamento:'Exec.',devolvida:'Devolv.',conferencia:'Confer.',concluida:'Concl.'};
 const SIT_T_ORD=['pendente','andamento','devolvida','conferencia','concluida'];
-const SIT_D={andamento:'Em andamento',parado:'Parado',finalizado:'Finalizado'};
+const SIT_D={dev:'Em desenvolvimento',aprovacao:'Em aprovação',cliente:'Com o cliente',parado:'Parado',encerrado:'Encerrado'};
 const PRIO={1:'Urgente',2:'Alta',3:'Normal',4:'Baixa'};
 const WD=['D','S','T','Q','Q','S','S'];
 const WDL=['dom','seg','ter','qua','qui','sex','sáb'];
@@ -301,9 +301,9 @@ function latestStart(prazo,n,days){let d=parse(prazo),c=0,g=0;if(!days.length)da
 /* Cada computador grava só o seu arquivo em alteracoes/<computador>.json.
    O app lê os arquivos de todos e junta as alterações por ordem de horário.
    Uma vez por dia, um coordenador consolida tudo em base.json e grava um backup. */
-let S={me:'',users:[],clientes:[],emps:[],categorias:[],discs:[],tipos:[],modelos:[],projetos:[],pdiscs:[],tarefas:[]};
+let S={me:'',users:[],clientes:[],emps:[],categorias:[],discs:[],tipos:[],etapas:[],modelos:[],projetos:[],pdiscs:[],tarefas:[]};
 const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-const COLS=['users','clientes','emps','categorias','discs','tipos','modelos','projetos','pdiscs','tarefas'];
+const COLS=['users','clientes','emps','categorias','discs','tipos','etapas','modelos','projetos','pdiscs','tarefas'];
 const COLAB_SIT={pendente:['pendente','andamento'],devolvida:['devolvida','andamento'],andamento:['andamento','conferencia'],conferencia:['conferencia'],concluida:['concluida']};
 const COLAB_TASK_KEYS=['onde','pend','iniReal','fimExec','sit','atualEm','atualPor'];
 const emptyData=()=>{const d={};COLS.forEach(c=>d[c]=[]);return d};
@@ -370,9 +370,11 @@ function rebuild(){
 // ---- projeto → disciplinas: compatibilidade com dados do modelo antigo (uma disciplina por projeto)
 const LEGACY_P=['disc','codigo','nome','ini','fim','est','sit','motivo','resp'];
 const DEF_CATS=['Loteamento','Condomínio de Lotes','Condomínio de Prédios'];
+const DEF_ETAPAS=['Projeto legal','Revisão (comunique-se)','Preliminar','Anteprojeto','Pré-executivo','Executivo','Liberado para obra','Revisão do cliente'];
 let migrating=false;
 function normalize(d){
   if(!d.categorias.length)d.categorias=DEF_CATS.map((nome,i)=>({id:'cat'+(i+1),nome,_syn:1}));
+  if(!d.etapas.length)d.etapas=DEF_ETAPAS.map((nome,i)=>({id:'et'+(i+1),nome,ord:i,_syn:1}));
   const have=new Set(d.pdiscs.map(x=>x.id));
   d.projetos.forEach(p=>{if(p.disc&&!have.has('pd'+p.id)){d.pdiscs.push({id:'pd'+p.id,proj:p.id,disc:p.disc,codigo:p.codigo||'',tipo:'',resp:p.resp||'',prazo:p.fim||'',est:p.est||'',sit:(p.sit==='parado'||p.sit==='finalizado')?p.sit:'andamento',motivo:p.motivo||'',hist:[],_syn:1});have.add('pd'+p.id)}});
   const first={};d.pdiscs.forEach(x=>{if(!first[x.proj])first[x.proj]=x.id});
@@ -382,6 +384,7 @@ async function migrate(){
   if(!S.me||!isCoord()||FS.status!=='ok'||migrating)return false;
   const evs=[];const same=(a,b)=>stripAc(a||'').trim().toLowerCase()===stripAc(b||'').trim().toLowerCase();
   DATA.categorias.filter(c=>c._syn).forEach(c=>evs.push({c:'categorias',id:c.id,op:'put',set:{nome:c.nome}}));
+  DATA.etapas.filter(c=>c._syn).forEach(c=>evs.push({c:'etapas',id:c.id,op:'put',set:{nome:c.nome,ord:c.ord}}));
   DATA.pdiscs.filter(x=>x._syn).forEach(x=>{const set={};for(const k in x)if(k!=='id'&&k[0]!=='_')set[k]=x[k];evs.push({c:'pdiscs',id:x.id,op:'put',set})});
   DATA.tarefas.filter(t=>t._synpd).forEach(t=>evs.push({c:'tarefas',id:t.id,op:'put',set:{pd:t.pd}}));
   DATA.projetos.filter(p=>LEGACY_P.some(k=>k in p)).forEach(p=>{const set={},nm=(p.nome||'').trim();
@@ -396,7 +399,7 @@ function clearView(){S.me='';COLS.forEach(c=>S[c]=[]);snapAll()}
 function buildView(){
   const u=DATA.users.find(x=>x.id===S.me);const coord=u&&u.perfil==='coord'&&u.status==='ativo';
   const v={};COLS.forEach(c=>v[c]=DATA[c]);
-  if(!coord){v.tarefas=DATA.tarefas.filter(t=>t.resp===S.me);const ps=new Set(v.tarefas.map(t=>t.proj)),pds=new Set(v.tarefas.map(t=>t.pd));v.projetos=DATA.projetos.filter(p=>ps.has(p.id));v.pdiscs=DATA.pdiscs.filter(x=>pds.has(x.id));v.users=DATA.users.filter(x=>x.status==='ativo')}
+  if(!coord){v.tarefas=DATA.tarefas;const ps=new Set(v.tarefas.map(t=>t.proj)),pds=new Set(v.tarefas.map(t=>t.pd));v.projetos=DATA.projetos.filter(p=>ps.has(p.id));v.pdiscs=DATA.pdiscs.filter(x=>pds.has(x.id));v.users=DATA.users.filter(x=>x.status==='ativo')}
   COLS.forEach(c=>S[c]=JSON.parse(JSON.stringify(v[c])));
   S.users.forEach(x=>delete x.hash);
   snapAll();
@@ -594,7 +597,15 @@ const tLabel=t=>{const x=tPD(t),p=PR(t.proj);return (x?x.codigo+' · ':'')+(EM(p
 const pdTipo=x=>TI((x&&x.tipo)||PR(x?.proj)?.tipo);
 const pdTasks=id=>S.tarefas.filter(t=>t.pd===id);
 const projPds=pid=>S.pdiscs.filter(x=>x.proj===pid).sort((a,b)=>(a.codigo||'').localeCompare(b.codigo||''));
-const pdVencido=x=>x.sit!=='finalizado'&&x.prazo&&x.prazo<TODAY;
+const ET=id=>byId(S.etapas,id);
+const etapasOrd=()=>S.etapas.slice().sort((a,b)=>((a.ord??99)-(b.ord??99))||(a.nome||'').localeCompare(b.nome||''));
+const tAberta=t=>t.sit==='pendente'||t.sit==='andamento'||t.sit==='devolvida'||t.sit==='conferencia';
+const pdStored=x=>{const s=(x&&x.sit)||'';return (s==='andamento'||s==='dev')?'':s==='finalizado'?'cliente':s};
+function pdSit(x){const s=pdStored(x);if(s==='parado')return 'parado';const ts=pdTasks(x.id);if(ts.some(tAberta))return 'dev';if(s)return s;return ts.length?'cliente':'dev'}
+const pdAuto=x=>{const ts=pdTasks(x.id);return (ts.some(tAberta)||!ts.length)?'dev':'cliente'};
+function pdNext(x){return pdTasks(x.id).filter(t=>tAberta(t)&&t.fim).reduce((m,t)=>(!m||t.fim<m)?t.fim:m,'')}
+function pdLast(x){return pdTasks(x.id).filter(t=>t.sit==='concluida').sort((a,b)=>((a.fimExec||a.aprovEm||'')<(b.fimExec||b.aprovEm||'')?1:-1))[0]||null}
+const pdVencido=x=>pdTasks(x.id).some(t=>tVencida(t));
 const sortT=(a,b)=>(a.prio-b.prio)||((a.fim||'9')<(b.fim||'9')?-1:(a.fim||'9')>(b.fim||'9')?1:0);
 const openSit=s=>s==='pendente'||s==='andamento'||s==='devolvida';
 function tRange(t){const s=t.iniReal||t.ini;if(!s)return null;let e;
@@ -661,7 +672,7 @@ function taskCard(t,showWho){
   const lastDev=t.sit==='devolvida'?[...(t.hist||[])].reverse().find(x=>x.k==='devolucao'):null;
   return '<div class="kcard" tabindex="0" role="button" data-open="'+t.id+'" style="--edge:'+prioVar(t.prio)+'">'+
     '<div class="r"><span class="sw" style="background:'+cliVar(p?.cli)+'" title="'+esc(CL(p?.cli)?.nome)+'"></span><span class="small mono muted" style="margin-right:auto">'+esc(x?.codigo||'')+' · '+esc(DI(x?.disc)?.nome||'')+'</span>'+prioPill(t.prio)+'</div>'+
-    '<div class="t">'+esc(t.titulo)+'</div>'+
+    '<div class="t">'+esc(t.titulo)+'</div>'+(ET(t.etapa)?'<div class="small" style="color:var(--accent);font-weight:600">'+esc(ET(t.etapa).nome)+'</div>':'')+
     '<div class="m">'+esc(projLabel(p))+' · '+esc(CL(p?.cli)?.nome||'')+'</div>'+
     (lastDev?'<div class="q" style="border-left-color:var(--s-devolvida);color:var(--s-devolvida)">'+esc(lastDev.det)+'</div>':t.onde&&t.sit!=='concluida'?'<div class="q">'+esc(t.onde)+'</div>':'')+
     '<div class="r"><span class="mono small'+(venc?'" style="color:var(--bad);font-weight:600':'')+'">'+(t.fim?'até '+br(t.fim):'sem data')+(venc?' · vencida':'')+'</span>'+(showWho?'<span class="small"><b>'+esc(uname(t.resp))+'</b></span>':'')+(showWho?'':sitPill(t.sit))+'</div>'+
@@ -680,23 +691,24 @@ function taskKanban(){
       (L.length?L.map(t=>taskCard(t,quem!=='eu')).join(''):'<p class="small muted" style="margin:4px">Nada aqui.</p>')+'</section>'}).join('')+'</div></div>';
 }
 function pdCard(x){
-  const p=PR(x.proj);const ts=pdTasks(x.id),done=ts.filter(t=>t.sit==='concluida').length,conf=ts.filter(t=>t.sit==='conferencia').length;
+  const p=PR(x.proj);const ts=pdTasks(x.id),done=ts.filter(t=>t.sit==='concluida').length,conf=ts.filter(t=>t.sit==='conferencia').length,open=ts.filter(tAberta).length;
+  const nx=pdNext(x),last=pdLast(x),sit=pdSit(x);
   let extra='';
-  if(x.sit==='andamento'&&x.prazo&&x.est&&!ts.some(t=>t.iniReal)){const ls=latestStart(x.prazo,+x.est,daysOf(x.resp));const fol=wdBetween(TODAY,ls,daysOf(x.resp))-1;
-    extra='<div class="r"><span class="small">Começar até <b class="mono">'+br(ls)+'</b></span>'+(ls<TODAY?'<span class="pill bad">atrasada p/ começar</span>':fol<=5?'<span class="pill warn">folga '+Math.max(fol,0)+' d.u.</span>':'<span class="pill ok">folga '+fol+' d.u.</span>')+'</div>'}
-  if(x.sit==='parado'&&x.motivo)extra='<div class="q" style="border-left-color:var(--warn)">'+esc(x.motivo)+'</div>';
+  if(!open&&last)extra+='<div class="small muted">Última entrega: <b style="color:var(--fg)">'+esc(ET(last.etapa)?.nome||last.titulo)+'</b> · '+br(last.fimExec||(last.aprovEm||'').slice(0,10))+'</div>';
+  if(sit==='parado'&&x.motivo)extra+='<div class="q" style="border-left-color:var(--warn)">'+esc(x.motivo)+'</div>';
   return '<div class="kcard" tabindex="0" role="button" draggable="true" data-pd="'+x.id+'" style="--edge:'+cliVar(p?.cli)+'">'+
     '<div class="r"><span class="small mono muted">'+esc(x.codigo)+'</span><span class="small">'+esc(pdTipo(x)?.nome||'')+'</span></div>'+
     '<div class="t">'+esc(DI(x.disc)?.nome||'')+'</div><div class="m">'+esc(projLabel(p))+' · '+esc(CL(p?.cli)?.nome||'')+'</div>'+
-    '<div class="r"><span class="small">Resp.: <b>'+esc(uname(x.resp))+'</b></span><span class="mono small'+(pdVencido(x)?'" style="color:var(--bad);font-weight:600':'')+'">'+(x.prazo?'entrega '+br(x.prazo):'sem prazo')+'</span></div>'+
-    (ts.length?'<div class="r"><div class="prog" style="flex:1"><i style="width:'+(done/ts.length*100)+'%"></i></div><span class="small mono">'+done+'/'+ts.length+'</span>'+(conf?'<span class="pill" style="color:var(--s-conferencia)">'+conf+' p/ conferir</span>':'')+'</div>':'<div class="small muted">Sem tarefas</div>')+
+    '<div class="r"><span class="small">Resp.: <b>'+esc(uname(x.resp))+'</b></span>'+(nx?'<span class="mono small'+(pdVencido(x)?'" style="color:var(--bad);font-weight:600':'')+'">entrega '+br(nx)+'</span>':'')+'</div>'+
+    (ts.length?'<div class="r"><div class="prog" style="flex:1"><i style="width:'+(done/ts.length*100)+'%"></i></div><span class="small mono">'+done+'/'+ts.length+'</span>'+(conf?'<span class="pill" style="color:var(--s-conferencia)">'+conf+' p/ conferir</span>':'')+'</div>':'<div class="small muted">Sem tarefas ainda</div>')+
     extra+'</div>';
 }
 function projKanban(){
-  const cols=['andamento','parado','finalizado'];
-  return '<p class="small muted" style="margin:0 0 8px">Um cartão para cada disciplina de cada projeto. Arraste para mudar a situação; ela não muda sozinha quando as tarefas são concluídas.</p><div class="kwrap"><div class="kanban">'+cols.map(s=>{
-    const L=S.pdiscs.filter(x=>x.sit===s&&PR(x.proj)).sort((a,b)=>((a.prazo||'9')<(b.prazo||'9')?-1:(a.prazo||'9')>(b.prazo||'9')?1:(a.codigo||'').localeCompare(b.codigo||'')));
-    return '<section class="kcol" data-drop="'+s+'"><h4>'+SIT_D[s]+'<span class="c">'+L.length+'</span></h4>'+(L.length?L.map(pdCard).join(''):'<p class="small muted" style="margin:4px">Nenhuma disciplina.</p>')+'</section>'}).join('')+'</div></div>';
+  const cols=['dev','aprovacao','cliente','parado'];
+  const all=S.pdiscs.filter(x=>PR(x.proj)).map(x=>({x,s:pdSit(x),n:pdNext(x)}));
+  return '<p class="small muted" style="margin:0 0 8px">Um cartão para cada disciplina. “Em desenvolvimento” é automático: vale enquanto houver tarefas em aberto, e uma tarefa nova traz a disciplina de volta para cá. Sem tarefas em aberto, arraste para Em aprovação, Com o cliente ou Parado. As encerradas ficam na aba Projetos.</p><div class="kwrap"><div class="kanban">'+cols.map(s=>{
+    const L=all.filter(o=>o.s===s).sort((a,b)=>((a.n||'9')<(b.n||'9')?-1:(a.n||'9')>(b.n||'9')?1:(a.x.codigo||'').localeCompare(b.x.codigo||'')));
+    return '<section class="kcol" data-drop="'+s+'"><h4>'+SIT_D[s]+'<span class="c">'+L.length+'</span></h4>'+(L.length?L.map(o=>pdCard(o.x)).join(''):'<p class="small muted" style="margin:4px">Nenhuma disciplina.</p>')+'</section>'}).join('')+'</div></div>';
 }
 function bindCards(el){
   el.querySelectorAll('[data-open]').forEach(c=>{c.onclick=e=>{if(e.target.closest('[data-act]'))return;e.stopPropagation();openTask(c.dataset.open)};
@@ -713,12 +725,23 @@ function bindProjDrag(el){
   el.querySelectorAll('[data-drop]').forEach(col=>{
     col.ondragover=e=>{e.preventDefault();col.classList.add('over')};
     col.ondragleave=()=>col.classList.remove('over');
-    col.ondrop=e=>{e.preventDefault();col.classList.remove('over');const x=PDx(dragId);const s=col.dataset.drop;if(!x||x.sit===s)return;
+    col.ondrop=e=>{e.preventDefault();col.classList.remove('over');const x=PDx(dragId);const s=col.dataset.drop;if(!x||pdSit(x)===s)return;
+      const open=pdTasks(x.id).some(tAberta);
       if(s==='parado'){askMotivo(x);return}
+      if(s==='dev'){if(!open){toast('Para voltar a desenvolver, crie uma tarefa nesta disciplina');return}setPdSit(x,'');save();render();toast(pdLabel(x)+': '+SIT_D.dev);return}
+      if(open){toast('Esta disciplina ainda tem tarefas em aberto. Ela fica em desenvolvimento até as tarefas serem concluídas.');return}
       setPdSit(x,s);save();render();toast(pdLabel(x)+': '+SIT_D[s])}});
 }
-function setPdSit(x,s,motivo){const old=x.sit;x.sit=s;if(s==='parado')x.motivo=motivo||x.motivo;if(!Array.isArray(x.hist))x.hist=[];
-  log(x,'situacao','Situação: '+(SIT_D[old]||old||'—')+' → '+SIT_D[s],s==='parado'?x.motivo:'')}
+function setPdSit(x,s,motivo){const old=pdSit(x);x.sit=s;if(s==='parado')x.motivo=motivo||x.motivo;if(!Array.isArray(x.hist))x.hist=[];
+  const nw=pdSit(x);if(nw!==old)log(x,'situacao','Situação: '+(SIT_D[old]||'—')+' → '+SIT_D[nw],s==='parado'?x.motivo:'')}
+function reopenPd(id){const x=PDx(id);if(x&&pdStored(x))setPdSit(x,'')}
+function askDestino(id){
+  const x=PDx(id);if(!x||!isCoord()||pdTasks(x.id).some(tAberta)||pdStored(x)==='encerrado')return;
+  const d=document.getElementById('dlg2'),f=document.getElementById('dlg2Form');
+  f.innerHTML='<div class="dlg-h"><div><div class="ctx">'+esc(pdLabel(x))+' · '+esc(projLabel(PR(x.proj)))+'</div><h2>Todas as tarefas desta disciplina foram concluídas</h2></div></div><div class="dlg-b"><p style="margin:0">Onde a disciplina fica agora?</p><div class="actions"><button class="btn primary" type="button" data-dest="aprovacao">Em aprovação</button><button class="btn primary" type="button" data-dest="cliente">Com o cliente</button><button class="btn" type="button" data-dest="encerrado">Encerrar a disciplina</button></div><p class="small muted" style="margin:0">Se vier revisão depois, é só criar uma tarefa nova: ela volta sozinha para Em desenvolvimento.</p></div><div class="dlg-f"><span class="sp"></span><button class="btn" value="cancel">Decidir depois</button></div>';
+  f.querySelectorAll('[data-dest]').forEach(b=>b.onclick=()=>{setPdSit(x,b.dataset.dest);save();d.close();render();toast(pdLabel(x)+': '+SIT_D[b.dataset.dest])});
+  d.showModal();
+}
 function askMotivo(x,after){
   const d=document.getElementById('dlg2'),f=document.getElementById('dlg2Form');
   f.innerHTML='<div class="dlg-h"><div><div class="ctx">'+esc(pdLabel(x))+' · '+esc(projLabel(PR(x.proj)))+'</div><h2>Por que a disciplina parou?</h2></div></div><div class="dlg-b"><div class="f"><label for="mtv">Motivo da paralisação</label><textarea id="mtv" rows="3" placeholder="ex.: aguardando levantamento topográfico do cliente">'+esc(x.motivo)+'</textarea></div></div><div class="dlg-f"><span class="sp"></span><button class="btn" value="cancel">Cancelar</button><button class="btn primary" type="button" id="mtvOk">Marcar como parada</button></div>';
@@ -733,14 +756,14 @@ function askMotivo(x,after){
 function blankTask(){return {id:'',proj:'',titulo:'',desc:'',resp:'',prio:3,ini:'',fim:'',iniBase:'',fimBase:'',iniReal:'',fimExec:'',aprovEm:'',aprovPor:'',sit:'pendente',onde:'',pend:'',atualEm:'',atualPor:'',criadoEm:'',hist:[]}}
 function doStart(t){const was=t.sit;if(!t.iniReal)t.iniReal=TODAY;t.sit='andamento';log(t,'situacao',was==='devolvida'?'Retomou após devolução':'Iniciou a execução');save();render();toast(was==='devolvida'?'Tarefa retomada':'Início registrado')}
 function projOptions(sel,all){
-  const groups=S.clientes.map(c=>{const ps=S.projetos.filter(p=>p.cli===c.id&&(all||p.id===sel||projPds(p.id).some(x=>x.sit!=='finalizado')));if(!ps.length)return '';
+  const groups=S.clientes.map(c=>{const ps=S.projetos.filter(p=>p.cli===c.id);if(!ps.length)return '';
     return '<optgroup label="'+esc(c.nome)+'">'+ps.sort((a,b)=>projLabel(a).localeCompare(projLabel(b))).map(p=>'<option value="'+p.id+'"'+(p.id===sel?' selected':'')+'>'+esc(projLabel(p))+'</option>').join('')+'</optgroup>'}).join('');
   return '<option value="">Selecione o projeto…</option>'+groups}
 function pdOptions(pid,sel){
   if(!pid)return '<option value="">Escolha o projeto primeiro</option>';
-  const L=projPds(pid).filter(x=>x.sit!=='finalizado'||x.id===sel);
-  if(!L.length)return '<option value="">Este projeto não tem disciplinas abertas</option>';
-  return (L.length>1?'<option value="">Selecione a disciplina…</option>':'')+L.map(x=>'<option value="'+x.id+'"'+(x.id===sel||L.length===1?' selected':'')+'>'+esc(pdLabel(x))+'</option>').join('')}
+  const L=projPds(pid);
+  if(!L.length)return '<option value="">Este projeto ainda não tem disciplinas</option>';
+  return (L.length>1?'<option value="">Selecione a disciplina…</option>':'')+L.map(x=>'<option value="'+x.id+'"'+(x.id===sel||L.length===1?' selected':'')+'>'+esc(pdLabel(x))+(pdSit(x)!=='dev'?' ('+SIT_D[pdSit(x)].toLowerCase()+')':'')+'</option>').join('')}
 function openTask(id,preset,focus){
   const isNew=!id;const t=id?byId(S.tarefas,id):Object.assign(blankTask(),preset||{});
   if(!t)return;
@@ -761,17 +784,18 @@ function openTask(id,preset,focus){
       '<div class="f full"><label for="tDesc">Descrição / instruções</label><textarea id="tDesc" rows="2">'+esc(t.desc)+'</textarea></div>'+
       '<div class="f"><label for="tResp">Responsável</label><select id="tResp">'+opts(ativos().map(u=>[u.id,u.nome]),t.resp,'— definir —')+'</select></div>'+
       '<div class="f"><label for="tPrio">Prioridade</label><select id="tPrio">'+opts(Object.entries(PRIO),t.prio)+'</select></div>'+
+      '<div class="f"><label for="tEt">Etapa</label><select id="tEt">'+opts(etapasOrd().map(x=>[x.id,x.nome]),t.etapa||'','—')+'</select></div>'+
       '</div><div class="fg c3" style="margin-top:10px">'+
       '<div class="f"><label for="tIni">Início previsto</label><input id="tIni" type="date" value="'+t.ini+'"></div>'+
       '<div class="f"><label for="tDur">Duração (dias úteis)</label><input id="tDur" type="number" min="1" value="'+dur+'"></div>'+
       '<div class="f"><label for="tFim">Término previsto</label><input id="tFim" type="date" value="'+t.fim+'"></div>'+
-      '<div class="f full help" id="tHelp">O término é calculado pelos dias de trabalho do responsável.'+(t.fimBase&&t.fimBase!==t.fim?' Programação original: <b class="mono">'+br(t.iniBase)+' a '+br(t.fimBase)+'</b>.':'')+(pd&&pd.prazo?' Prazo da disciplina: <b class="mono">'+brY(pd.prazo)+'</b>.':'')+'</div>'+
+      '<div class="f full help" id="tHelp">O término é calculado pelos dias de trabalho do responsável.'+(t.fimBase&&t.fimBase!==t.fim?' Programação original: <b class="mono">'+br(t.iniBase)+' a '+br(t.fimBase)+'</b>.':'')+''+'</div>'+
       '</div></section>';
   }else{
     h+='<section class="sec"><h4>Tarefa e projeto</h4><div class="fg">'+
       '<div class="f full"><span class="lbl">Instruções</span><div class="ro">'+(esc(t.desc)||'<span class="muted">Sem instruções.</span>')+'</div></div>'+
       '<div class="f"><span class="lbl">Previsto</span><div class="ro mono">'+br(t.ini)+' a '+br(t.fim)+'</div></div>'+
-      '<div class="f"><span class="lbl">Prazo da disciplina</span><div class="ro mono">'+brY(pd?.prazo)+'</div></div>'+
+      '<div class="f"><span class="lbl">Etapa</span><div class="ro">'+esc(ET(t.etapa)?.nome||'—')+'</div></div>'+
       '<div class="f"><span class="lbl">Tipo / disciplina</span><div class="ro">'+esc(pdTipo(pd)?.nome||'—')+' · '+esc(pdLabel(pd))+'</div></div>'+
       '<div class="f"><span class="lbl">Responsável pela disciplina</span><div class="ro">'+esc(uname(pd?.resp))+'</div></div>'+
       (p?.obs?'<div class="f full"><span class="lbl">Observações do projeto</span><div class="ro">'+esc(p.obs)+'</div></div>':'')+
@@ -796,6 +820,7 @@ function openTask(id,preset,focus){
       if(t.sit==='andamento'||t.sit==='devolvida'||t.sit==='pendente')a+='<button class="btn" type="button" id="aSave">Salvar andamento</button>';
       if(t.sit==='andamento')a+='<button class="btn conf" type="button" id="aSend">Enviar para conferência</button>';
     }
+    if(coord&&(t.sit==='pendente'||t.sit==='andamento'||t.sit==='devolvida'))a+='<button class="btn ok" type="button" id="aDirect">Concluir (sem conferência)</button>';
     if(coord&&t.sit==='conferencia')a+='<button class="btn ok" type="button" id="aApprove">Aprovar e concluir</button><button class="btn danger" type="button" id="aReturn">Devolver para ajustes</button>';
     if(coord&&t.sit==='concluida')a+='<button class="btn" type="button" id="aReopen">Reabrir tarefa</button>';
     if(!coord&&t.sit==='conferencia')a+='<span class="small muted">Enviada para conferência. A coordenação vai aprovar ou devolver.</span>';
@@ -824,20 +849,21 @@ function openTask(id,preset,focus){
   }
   function commitPlan(){
     if(!canPlan)return true;
-    const d={proj:$('#tProj').value,pd:$('#tPd').value,titulo:$('#tTit').value.trim(),desc:$('#tDesc').value.trim(),resp:$('#tResp').value,prio:+$('#tPrio').value,ini:$('#tIni').value,fim:$('#tFim').value};
+    const d={proj:$('#tProj').value,pd:$('#tPd').value,etapa:$('#tEt').value,titulo:$('#tTit').value.trim(),desc:$('#tDesc').value.trim(),resp:$('#tResp').value,prio:+$('#tPrio').value,ini:$('#tIni').value,fim:$('#tFim').value};
     if(!d.proj){$('#tProj').focus();toast('Escolha o projeto');return false}
     if(!d.pd){$('#tPd').focus();toast('Escolha a disciplina');return false}
     if(!d.titulo){$('#tTit').focus();toast('Dê um título à tarefa');return false}
     if(d.ini&&d.fim&&d.fim<d.ini){toast('O término não pode ser antes do início');return false}
     if(d.ini&&!d.fim)d.fim=d.ini;
-    if(isNew){Object.assign(t,d,{id:uid('k'),criadoEm:nowStamp(),iniBase:d.ini,fimBase:d.fim});log(t,'criacao','Criou a tarefa'+(d.resp?' e atribuiu a '+uname(d.resp):''));S.tarefas.push(t);return true}
+    if(isNew){Object.assign(t,d,{id:uid('k'),criadoEm:nowStamp(),iniBase:d.ini,fimBase:d.fim});log(t,'criacao','Criou a tarefa'+(d.resp?' e atribuiu a '+uname(d.resp):''));S.tarefas.push(t);reopenPd(t.pd);return true}
     const ch=[];
     if(d.resp!==t.resp){log(t,'resp',t.resp?'Redistribuiu de '+uname(t.resp)+' para '+uname(d.resp):'Atribuiu a '+uname(d.resp),t.onde?'Onde parei, no momento da troca: '+t.onde:'')}
     if(d.prio!==t.prio)log(t,'prio','Prioridade: '+PRIO[t.prio]+' → '+PRIO[d.prio]);
     if(d.ini!==t.ini||d.fim!==t.fim){if(!t.iniBase&&!t.fimBase){t.iniBase=d.ini;t.fimBase=d.fim;log(t,'prazo','Programou para '+br(d.ini)+' a '+br(d.fim))}
       else log(t,'prazo','Alterou o previsto de '+br(t.ini)+'–'+br(t.fim)+' para '+br(d.ini)+'–'+br(d.fim))}
     if(d.titulo!==t.titulo||d.desc!==t.desc||d.proj!==t.proj||d.pd!==t.pd)ch.push('dados');
-    Object.assign(t,d);if(ch.length)log(t,'edicao','Editou os dados da tarefa');return true}
+    if((d.etapa||'')!==(t.etapa||''))log(t,'edicao','Etapa: '+(ET(t.etapa)?.nome||'—')+' → '+(ET(d.etapa)?.nome||'—'));
+    const pdMudou=d.pd!==t.pd;Object.assign(t,d);if(pdMudou&&tAberta(t))reopenPd(t.pd);if(ch.length)log(t,'edicao','Editou os dados da tarefa');return true}
   function commitExec(silent){
     if(!$('#tOnde')||$('#tOnde').disabled)return;
     const onde=$('#tOnde').value.trim(),pend=$('#tPend').value.trim(),ir=$('#tIniR').value,fr=$('#tFimR').value;
@@ -854,11 +880,12 @@ function openTask(id,preset,focus){
   if($('#aSave'))$('#aSave').onclick=()=>{if(!commitPlan())return;commitExec();finish('Andamento salvo',true)};
   if($('#aSend'))$('#aSend').onclick=()=>{if(!$('#tOnde').value.trim()){$('#tOnde').focus();toast('Descreva o que foi feito antes de enviar');return}
     if(!commitPlan())return;if(!$('#tFimR').value)$('#tFimR').value=TODAY;commitExec();t.sit='conferencia';log(t,'situacao','Enviou para conferência');finish('Enviada para conferência')};
-  if($('#aApprove'))$('#aApprove').onclick=()=>{if(!commitPlan())return;commitExec();t.sit='concluida';t.aprovEm=nowStamp();t.aprovPor=S.me;if(!t.fimExec)t.fimExec=TODAY;log(t,'aprovacao','Aprovou e concluiu a tarefa');finish('Tarefa aprovada e concluída')};
+  if($('#aApprove'))$('#aApprove').onclick=()=>{if(!commitPlan())return;commitExec();t.sit='concluida';t.aprovEm=nowStamp();t.aprovPor=S.me;if(!t.fimExec)t.fimExec=TODAY;log(t,'aprovacao','Aprovou e concluiu a tarefa');finish('Tarefa aprovada e concluída');askDestino(t.pd)};
+  if($('#aDirect'))$('#aDirect').onclick=()=>{if(!commitPlan())return;commitExec();if(!t.iniReal)t.iniReal=TODAY;if(!t.fimExec)t.fimExec=TODAY;t.sit='concluida';t.aprovEm=nowStamp();t.aprovPor=S.me;log(t,'aprovacao','Concluiu sem conferência');finish('Tarefa concluída');askDestino(t.pd)};
   if($('#aReturn'))$('#aReturn').onclick=()=>{$('#retZone').innerHTML='<div class="f" style="margin-top:10px"><label for="retTx">Orientações para correção</label><textarea id="retTx" rows="3" placeholder="O que precisa ser ajustado"></textarea></div><div class="actions" style="margin-top:8px"><button class="btn danger" type="button" id="retOk">Devolver ao colaborador</button></div>';
     $('#retTx').focus();$('#retOk').onclick=()=>{const tx=$('#retTx').value.trim();if(!tx){$('#retTx').focus();toast('Escreva as orientações');return}
       if(!commitPlan())return;commitExec();t.sit='devolvida';t.fimExec='';log(t,'devolucao','Devolveu para ajustes',tx);finish('Tarefa devolvida')}};
-  if($('#aReopen'))$('#aReopen').onclick=()=>{t.sit='andamento';t.aprovEm='';t.aprovPor='';log(t,'situacao','Reabriu a tarefa');finish('Tarefa reaberta',true)};
+  if($('#aReopen'))$('#aReopen').onclick=()=>{t.sit='andamento';t.aprovEm='';t.aprovPor='';log(t,'situacao','Reabriu a tarefa');reopenPd(t.pd);finish('Tarefa reaberta',true)};
   if(!dlg.open)dlg.showModal();
   setTimeout(()=>{if(focus==='send'||focus==='onde'){const o=$('#tOnde');if(o){o.focus();o.setSelectionRange(o.value.length,o.value.length)}}else if(isNew&&$('#tProj')&&!t.proj)$('#tProj').focus();else if(isNew&&$('#tMod'))$('#tMod').focus()},30);
 }
@@ -873,7 +900,7 @@ function openProj(id,focusPd){
   const isNew=!id;const p=id?PR(id):{id:'',cli:'',emp:'',cat:'',tipo:S.tipos[0]?.id||'',obs:'',hist:[]};
   if(!p)return;
   const dlg=document.getElementById('dlg'),f=document.getElementById('dlgForm');dlg.classList.add('wide');
-  let rows=isNew?[]:projPds(p.id).map(x=>({id:x.id,disc:x.disc,codigo:x.codigo,tipo:x.tipo||'',resp:x.resp||'',prazo:x.prazo||'',est:x.est||'',sit:x.sit||'andamento',motivo:x.motivo||'',old:true}));
+  let rows=isNew?[]:projPds(p.id).map(x=>({id:x.id,disc:x.disc,codigo:x.codigo,tipo:x.tipo||'',resp:x.resp||'',prazo:x.prazo||'',est:x.est||'',sit:pdStored(x),motivo:x.motivo||'',old:true}));
   const ts=isNew?[]:projTasks(p.id);
   let h='<div class="dlg-h"><div><div class="ctx">'+(isNew?'Cliente › Empreendimento':esc(CL(p.cli)?.nome))+'</div><h2>'+(isNew?'Novo projeto':esc(projLabel(p)))+'</h2></div><button class="btn x" value="cancel" aria-label="Fechar">✕</button></div><div class="dlg-b">'+
    '<section class="sec"><h4>Dados do projeto</h4><div class="fg">'+
@@ -887,7 +914,7 @@ function openProj(id,focusPd){
   if(!isNew){
     const sorted=ts.slice().sort((a,b)=>((tPD(a)?.codigo||'').localeCompare(tPD(b)?.codigo||''))||((a.ini||'9')<(b.ini||'9')?-1:1));
     h+='<section class="sec"><h4>Tarefas do projeto <span class="sp" style="flex:1"></span><button class="btn sm" type="button" id="pFromMod">+ A partir de modelos</button><button class="btn sm primary" type="button" id="pNewT">+ Tarefa</button></h4><div id="modZone"></div>'+
-      (sorted.length?'<div class="tblwrap"><table><thead><tr><th>Disciplina</th><th>Tarefa</th><th>Responsável</th><th class="n">Previsto</th><th>Situação</th></tr></thead><tbody>'+sorted.map(t=>'<tr class="click" data-t="'+t.id+'"><td class="mono small">'+esc(tPD(t)?.codigo||'—')+'</td><td><b>'+esc(t.titulo)+'</b></td><td>'+esc(uname(t.resp))+'</td><td class="n">'+br(t.ini)+'–'+br(t.fim)+'</td><td>'+sitPill(t.sit)+'</td></tr>').join('')+'</tbody></table></div>':'<p class="small muted" style="margin:0">Nenhuma tarefa ainda. Use os modelos para criar a sequência de uma vez.</p>')+'</section>';
+      (sorted.length?'<div class="tblwrap"><table><thead><tr><th>Disciplina</th><th>Etapa</th><th>Tarefa</th><th>Responsável</th><th class="n">Previsto</th><th>Situação</th></tr></thead><tbody>'+sorted.map(t=>'<tr class="click" data-t="'+t.id+'"><td class="mono small">'+esc(tPD(t)?.codigo||'—')+'</td><td class="small">'+esc(ET(t.etapa)?.nome||'')+'</td><td><b>'+esc(t.titulo)+'</b></td><td>'+esc(uname(t.resp))+'</td><td class="n">'+br(t.ini)+'–'+br(t.fim)+'</td><td>'+sitPill(t.sit)+'</td></tr>').join('')+'</tbody></table></div>':'<p class="small muted" style="margin:0">Nenhuma tarefa ainda. Use os modelos para criar a sequência de uma vez.</p>')+'</section>';
     const hs=(p.hist||[]).map(x=>Object.assign({},x,{pre:''})).concat(...projPds(p.id).map(x=>(x.hist||[]).map(y=>Object.assign({},y,{pre:x.codigo}))));
     hs.sort((a,b)=>a.ts<b.ts?1:-1);
     h+='<section class="sec"><h4>Histórico do projeto</h4><ul class="hist">'+hs.map(x=>'<li><time>'+brTs(x.ts)+'</time>'+(x.pre?'<span class="mono small">'+esc(x.pre)+'</span> ':'')+'<b>'+esc(uname(x.u))+'</b> — '+esc(x.txt)+(x.det?'<span class="tx">'+esc(x.det)+'</span>':'')+'</li>').join('')+'</ul></section>';
@@ -899,20 +926,19 @@ function openProj(id,focusPd){
   fillEmp();
   const codeFor=r=>{const v=$('#pEmp').value;if(r.old&&v===p.emp&&r.codigo)return r.codigo;const d=DI(r.disc);if(!d)return '';
     if(v&&v!=='__new')return pdCode(v,r.disc,r.id);const sg=sugEmpSigla($('#pEmpNew').value);return (sg?sg+'-':'')+(d.sigla||sugSigla(d.nome))};
-  const syncRows=()=>rows.forEach(r=>{const g=k=>f.querySelector('#pd_'+r.id+'_'+k);if(!g('sit'))return;r.tipo=g('tipo').value;r.resp=g('resp').value;r.prazo=g('prazo').value;r.est=g('est').value;r.sit=g('sit').value;r.motivo=g('mot').value.trim()});
+  const syncRows=()=>rows.forEach(r=>{const g=k=>f.querySelector('#pd_'+r.id+'_'+k);if(!g('sit'))return;r.tipo=g('tipo').value;r.resp=g('resp').value;r.sit=g('sit').value;r.motivo=g('mot').value.trim()});
   function renderRows(){
     $('#pdChips').innerHTML=S.discs.map(d=>'<label><input type="checkbox" value="'+d.id+'"'+(rows.some(r=>r.disc===d.id)?' checked':'')+'>'+esc(d.nome)+'</label>').join('');
-    $('#pdRows').innerHTML=rows.length?'<div class="tblwrap" style="margin-top:10px"><table><thead><tr><th>Código</th><th>Disciplina</th><th>Tipo</th><th>Responsável</th><th>Prazo de entrega</th><th title="Estimativa em dias úteis; com o prazo, calcula até quando começar">Est. (d.u.)</th><th>Situação</th><th class="n">Tarefas</th></tr></thead><tbody>'+
+    $('#pdRows').innerHTML=rows.length?'<div class="tblwrap" style="margin-top:10px"><table><thead><tr><th>Código</th><th>Disciplina</th><th>Tipo</th><th>Responsável</th><th>Próxima entrega</th><th>Situação</th><th class="n">Tarefas</th></tr></thead><tbody>'+
       rows.map(r=>{const n=ts.filter(t=>t.pd===r.id).length,k='pd_'+r.id+'_';
         return '<tr id="row_'+r.id+'"'+(r.id===focusPd?' class="hl"':'')+'><td class="mono small" style="white-space:nowrap">'+esc(codeFor(r))+'</td><td><b>'+esc(DI(r.disc)?.nome||'')+'</b></td>'+
           '<td style="min-width:130px"><select id="'+k+'tipo">'+opts(S.tipos.map(x=>[x.id,x.nome]),r.tipo,'Igual ao projeto')+'</select></td>'+
           '<td style="min-width:120px"><select id="'+k+'resp">'+opts(ativos().map(u=>[u.id,u.nome]),r.resp,'—')+'</select></td>'+
-          '<td style="min-width:140px"><input type="date" id="'+k+'prazo" value="'+r.prazo+'"></td>'+
-          '<td style="width:80px"><input type="number" min="1" id="'+k+'est" value="'+esc(r.est)+'"></td>'+
-          '<td style="min-width:140px"><select id="'+k+'sit">'+opts(Object.entries(SIT_D),r.sit)+'</select><input id="'+k+'mot" placeholder="Motivo da paralisação" value="'+esc(r.motivo)+'"'+(r.sit==='parado'?'':' hidden')+' style="margin-top:4px"></td>'+
+          '<td class="mono small" style="white-space:nowrap">'+(r.old&&PDx(r.id)&&pdNext(PDx(r.id))?br(pdNext(PDx(r.id))):'—')+'</td>'+
+          '<td style="min-width:140px"><select id="'+k+'sit">'+opts([['','Automática · '+SIT_D[r.old&&PDx(r.id)?pdAuto(PDx(r.id)):'dev']]].concat(['aprovacao','cliente','parado','encerrado'].map(k=>[k,SIT_D[k]])),r.sit)+'</select><input id="'+k+'mot" placeholder="Motivo da paralisação" value="'+esc(r.motivo)+'"'+(r.sit==='parado'?'':' hidden')+' style="margin-top:4px"></td>'+
           '<td class="n" style="white-space:nowrap">'+n+(r.old?' <button class="btn sm" type="button" data-newt="'+r.id+'" title="Nova tarefa nesta disciplina" aria-label="Nova tarefa em '+esc(DI(r.disc)?.nome||'')+'">+</button>':'')+'</td></tr>'}).join('')+'</tbody></table></div>':'<p class="small muted" style="margin:10px 0 0">Nenhuma disciplina marcada ainda.</p>';
     $('#pdChips').querySelectorAll('input').forEach(c=>c.onchange=()=>{syncRows();
-      if(c.checked){rows.push({id:uid('pd'),disc:c.value,codigo:'',tipo:'',resp:'',prazo:'',est:'',sit:'andamento',motivo:'',old:false})}
+      if(c.checked){rows.push({id:uid('pd'),disc:c.value,codigo:'',tipo:'',resp:'',prazo:'',est:'',sit:'',motivo:'',old:false})}
       else{const r=rows.find(x=>x.disc===c.value);if(r&&ts.some(t=>t.pd===r.id)){c.checked=true;toast('Esta disciplina já tem tarefas. Exclua ou mude as tarefas de disciplina antes de removê-la.');return}rows=rows.filter(x=>x.disc!==c.value)}
       rows.sort((a,b)=>(DI(a.disc)?.nome||'').localeCompare(DI(b.disc)?.nome||''));renderRows()});
     rows.forEach(r=>{const s=f.querySelector('#pd_'+r.id+'_sit'),m=f.querySelector('#pd_'+r.id+'_mot');s.onchange=()=>{m.hidden=s.value!=='parado';if(!m.hidden)m.focus()}});
@@ -950,7 +976,7 @@ function openProj(id,focusPd){
       else{if(!Array.isArray(x.hist))x.hist=[];
         if(r.prazo!==(x.prazo||''))log(x,'prazo','Prazo de entrega: '+brY(x.prazo)+' → '+brY(r.prazo));
         if(r.resp!==(x.resp||''))log(x,'resp','Responsável: '+uname(x.resp)+' → '+uname(r.resp));
-        if(r.sit!==x.sit)setPdSit(x,r.sit,r.motivo);else if(r.sit==='parado')x.motivo=r.motivo;
+        if(r.sit!==pdStored(x))setPdSit(x,r.sit,r.motivo);else if(r.sit==='parado')x.motivo=r.motivo;
         Object.assign(x,{codigo,tipo:r.tipo,resp:r.resp,prazo:r.prazo,est:r.est})}
       r.old=true;r.codigo=codigo});
     return true}
@@ -982,13 +1008,13 @@ function openProj(id,focusPd){
 // PLANEJAMENTO — Gantt e calendário
 // =====================================================================
 let PL={mode:'gantt',cal:'mes',anchor:TODAY,zoom:'5',f:{user:'',proj:'',emp:'',disc:'',sit:'abertas'}};
-function planTasks(){const F=PL.f;return visibleTasks().filter(t=>{const p=PR(t.proj);
+function planTasks(){const F=PL.f;return S.tarefas.filter(t=>{const p=PR(t.proj);
   if(F.user&&t.resp!==F.user)return false;if(F.proj&&t.proj!==F.proj)return false;if(F.emp&&p?.emp!==F.emp)return false;if(F.disc&&tPD(t)?.disc!==F.disc)return false;
   if(F.sit==='abertas'&&t.sit==='concluida')return false;if(F.sit&&F.sit!=='abertas'&&t.sit!==F.sit)return false;return true})}
-function planDeadlines(){const F=PL.f;return S.pdiscs.filter(x=>{const p=PR(x.proj);if(!p||!x.prazo)return false;
+function planDeadlines(){const F=PL.f;return S.pdiscs.map(x=>Object.assign({},x,{prazo:pdNext(x)})).filter(x=>{const p=PR(x.proj);if(!p||!x.prazo)return false;
   if(F.proj&&x.proj!==F.proj)return false;if(F.emp&&p.emp!==F.emp)return false;if(F.disc&&x.disc!==F.disc)return false;
-  return isCoord()?(!F.user||x.resp===F.user||pdTasks(x.id).some(t=>t.resp===F.user)):pdTasks(x.id).some(t=>t.resp===S.me)})}
-function planUsers(){if(!isCoord())return [me()];return ativos().filter(u=>!PL.f.user||u.id===PL.f.user)}
+  return !F.user||x.resp===F.user||pdTasks(x.id).some(t=>t.resp===F.user&&tAberta(t))})}
+function planUsers(){return ativos().filter(u=>!PL.f.user||u.id===PL.f.user)}
 function renderPlan(el){
   const coord=isCoord();const F=PL.f;
   let h='<div class="toolbar"><div class="seg" role="group" aria-label="Visualização"><button data-m="gantt" aria-pressed="'+(PL.mode==='gantt')+'">Gantt</button><button data-m="cal" aria-pressed="'+(PL.mode==='cal')+'">Calendário</button></div>';
@@ -996,7 +1022,7 @@ function renderPlan(el){
   else h+='<div class="seg" role="group" aria-label="Zoom"><button data-z="5" aria-pressed="'+(PL.zoom==='5')+'">5 semanas</button><button data-z="13" aria-pressed="'+(PL.zoom==='13')+'">3 meses</button></div>';
   h+='<button class="btn" id="plPrev" aria-label="Anterior">◀</button><button class="btn" id="plHoje">Hoje</button><button class="btn" id="plNext" aria-label="Próximo">▶</button><span class="range" id="plRange"></span><span class="sp"></span>'+(coord?'<button class="btn primary" id="plNova">+ Nova tarefa</button>':'')+'</div>';
   h+='<div class="toolbar" style="margin-top:0">'+
-    (coord?'<select id="fUser" aria-label="Colaborador">'+opts(ativos().map(u=>[u.id,u.nome]),F.user,'Toda a equipe')+'</select>':'<span class="small muted">Sua programação</span>')+
+    '<select id="fUser" aria-label="Colaborador">'+opts(ativos().map(u=>[u.id,u.nome]),F.user,'Toda a equipe')+'</select>'+
     '<select id="fEmp" aria-label="Empreendimento">'+opts(S.emps.map(e=>[e.id,e.nome]),F.emp,'Todos os empreendimentos')+'</select>'+
     '<select id="fProj" aria-label="Projeto">'+opts(S.projetos.filter(p=>!F.emp||p.emp===F.emp).map(p=>[p.id,projLabel(p)]),F.proj,'Todos os projetos')+'</select>'+
     '<select id="fDisc" aria-label="Disciplina">'+opts(S.discs.map(d=>[d.id,d.nome]),F.disc,'Todas as disciplinas')+'</select>'+
@@ -1043,7 +1069,7 @@ function renderGantt(body){
   if(dls.length){
     const lanes=[];dls.sort((a,b)=>a.prazo<b.prazo?-1:1).forEach(x=>{const s0=diffD(v0,x.prazo);const w=Math.ceil(((x.codigo||'').length*7+16)/col);let li=lanes.findIndex(e=>e<s0);if(li<0){li=lanes.length;lanes.push(s0+w)}else lanes[li]=s0+w;x._lane=li});
     const hg=Math.max(44,lanes.length*20+8);
-    h+='<div class="namecell" style="grid-row:'+row+';height:'+hg+'px"><b style="font-size:13px">Entregas</b><small>prazos das disciplinas</small></div><div class="rowbg flagrow" style="grid-column:2/-1;grid-row:'+row+';height:'+hg+'px;grid-template-columns:repeat('+N+',var(--col))">'+bg()+
+    h+='<div class="namecell" style="grid-row:'+row+';height:'+hg+'px"><b style="font-size:13px">Entregas</b><small>próximas entregas</small></div><div class="rowbg flagrow" style="grid-column:2/-1;grid-row:'+row+';height:'+hg+'px;grid-template-columns:repeat('+N+',var(--col))">'+bg()+
       dls.map(x=>'<span class="fl'+(x.sit==='finalizado'?' done':'')+'" data-pd="'+x.id+'" title="'+esc(pdLabel(x)+' — '+projLabel(PR(x.proj))+' — entrega '+brY(x.prazo))+'" style="left:calc('+diffD(v0,x.prazo)+' * var(--col) + var(--col)/2 - 5px);top:'+(4+x._lane*20)+'px">'+esc(x.codigo)+'</span>').join('')+'</div>';row++}
   users.forEach(u=>{
     const mine=tasks.filter(t=>t.resp===u.id&&tRange(t)).filter(t=>{const[s,e]=tRange(t);return e>=v0&&s<=v1});
@@ -1077,13 +1103,13 @@ function renderMonth(body){
   document.getElementById('plRange').textContent=MES[a.getMonth()]+' de '+a.getFullYear();
   let d=monday(first);const end=addI(monday(last),6);
   let h='<div class="tblwrap"><div class="cal" style="min-width:640px">'+['seg','ter','qua','qui','sex','sáb','dom'].map(x=>'<div class="hd">'+x+'</div>').join('');
-  const showIni=isCoord()&&!PL.f.user;
+  const showIni=!PL.f.user;
   while(d<=end){h+=calCell(d,d>=first&&d<=last,4,showIni);d=addI(d,1)}
   body.innerHTML=h+'</div></div>';bindCal(body);
 }
 function renderWeek(body){
   const m=monday(PL.anchor);document.getElementById('plRange').textContent=br(m)+' a '+brY(addI(m,6));
-  const showIni=isCoord()&&!PL.f.user;
+  const showIni=!PL.f.user;
   let h='<div class="tblwrap"><div class="cal week" style="min-width:760px">';
   for(let i=0;i<7;i++){const d=addI(m,i);h+='<div class="hd">'+WDL[parse(d).getDay()]+' '+br(d)+'</div>'}
   for(let i=0;i<7;i++)h+=calCell(addI(m,i),true,0,showIni).replace('<div class="dn"><b>'+parse(addI(m,i)).getDate()+'</b>','<div class="dn"><b></b>');
@@ -1138,21 +1164,21 @@ function renderTarefas(el){
 // =====================================================================
 let PF2={q:'',sit:'',cli:'',resp:''};
 function renderProjetos(el){
-  let h='<div class="toolbar"><input id="prQ" type="search" placeholder="Buscar cliente, empreendimento ou disciplina" value="'+esc(PF2.q)+'" style="max-width:300px"><select id="prCli">'+opts(S.clientes.map(c=>[c.id,c.nome]),PF2.cli,'Todos os clientes')+'</select><select id="prResp">'+opts(ativos().map(u=>[u.id,u.nome]),PF2.resp,'Todos os responsáveis')+'</select><select id="prSit">'+opts(Object.entries(SIT_D),PF2.sit,'Todas as situações')+'</select><span class="sp"></span><button class="btn primary" id="prNovo">+ Novo projeto</button></div>';
+  let h='<div class="toolbar"><input id="prQ" type="search" placeholder="Buscar cliente, empreendimento ou disciplina" value="'+esc(PF2.q)+'" style="max-width:300px"><select id="prCli">'+opts(S.clientes.map(c=>[c.id,c.nome]),PF2.cli,'Todos os clientes')+'</select><select id="prResp">'+opts(ativos().map(u=>[u.id,u.nome]),PF2.resp,'Todos os responsáveis')+'</select><select id="prSit">'+opts(Object.entries(SIT_D),PF2.sit,'Todas (menos encerradas)')+'</select><span class="sp"></span><button class="btn primary" id="prNovo">+ Novo projeto</button></div>';
   const q=PF2.q.toLowerCase();let rows='';
   S.clientes.filter(c=>!PF2.cli||c.id===PF2.cli).forEach(c=>{
     S.projetos.filter(p=>p.cli===c.id).sort((a,b)=>projLabel(a).localeCompare(projLabel(b))).forEach(p=>{
-      const all=projPds(p.id);const pds=all.filter(x=>(!PF2.sit||x.sit===PF2.sit)&&(!PF2.resp||x.resp===PF2.resp));
+      const all=projPds(p.id);const pds=all.filter(x=>(PF2.sit?pdSit(x)===PF2.sit:pdSit(x)!=='encerrado')&&(!PF2.resp||x.resp===PF2.resp));
       if(q&&!(c.nome+' '+projLabel(p)+' '+all.map(x=>x.codigo+' '+(DI(x.disc)?.nome||'')).join(' ')).toLowerCase().includes(q))return;
-      if((PF2.sit||PF2.resp)&&!pds.length)return;
+      if(all.length&&!pds.length)return;
       const sib=S.projetos.filter(o=>o.emp===p.emp);
       rows+='<tr class="grp click" data-p="'+p.id+'"><td colspan="7"><span class="sw" style="background:'+cliVar(c.id)+';vertical-align:-1px"></span> '+esc(c.nome)+' › '+esc(projLabel(p))+' <span class="small muted" style="font-family:var(--f-ui);font-weight:500;letter-spacing:0">· '+esc(TI(p.tipo)?.nome||'')+'</span>'+
         (sib.length>1&&sib[0]===p?' <button class="btn sm" type="button" data-merge="'+p.emp+'" style="margin-left:8px">Juntar os '+sib.length+' projetos de '+esc(EM(p.emp)?.nome||'')+'</button>':'')+'</td></tr>';
       rows+=pds.map(x=>{const ts=pdTasks(x.id),dn=ts.filter(t=>t.sit==='concluida').length;
-        return '<tr class="click" data-pd="'+x.id+'"><td class="mono small">'+esc(x.codigo)+'</td><td><b>'+esc(DI(x.disc)?.nome||'')+'</b>'+(x.sit==='parado'&&x.motivo?'<br><span class="small" style="color:var(--warn)">'+esc(x.motivo)+'</span>':'')+'</td><td>'+esc(pdTipo(x)?.nome||'')+'</td><td>'+esc(uname(x.resp))+'</td><td class="n"'+(pdVencido(x)?' style="color:var(--bad);font-weight:600"':'')+'>'+brY(x.prazo)+'</td><td>'+SIT_D[x.sit]+'</td><td class="n">'+dn+'/'+ts.length+'</td></tr>'}).join('');
+        return '<tr class="click" data-pd="'+x.id+'"><td class="mono small">'+esc(x.codigo)+'</td><td><b>'+esc(DI(x.disc)?.nome||'')+'</b>'+(pdSit(x)==='parado'&&x.motivo?'<br><span class="small" style="color:var(--warn)">'+esc(x.motivo)+'</span>':'')+'</td><td>'+esc(pdTipo(x)?.nome||'')+'</td><td>'+esc(uname(x.resp))+'</td><td class="n"'+(pdVencido(x)?' style="color:var(--bad);font-weight:600"':'')+'>'+brY(pdNext(x))+'</td><td>'+SIT_D[pdSit(x)]+'</td><td class="n">'+dn+'/'+ts.length+'</td></tr>'}).join('');
       if(!all.length)rows+='<tr class="click" data-p="'+p.id+'"><td colspan="7" class="small muted">Sem disciplinas. Clique para incluir.</td></tr>';
     })});
-  h+='<div class="card"><div class="tblwrap"><table><thead><tr><th>Código</th><th>Disciplina</th><th>Tipo</th><th>Responsável</th><th class="n">Entrega</th><th>Situação</th><th class="n">Tarefas</th></tr></thead><tbody>'+(rows||'<tr><td colspan="7" class="empty">Nenhum projeto encontrado.</td></tr>')+'</tbody></table></div></div>';
+  h+='<div class="card"><div class="tblwrap"><table><thead><tr><th>Código</th><th>Disciplina</th><th>Tipo</th><th>Responsável</th><th class="n">Próx. entrega</th><th>Situação</th><th class="n">Tarefas</th></tr></thead><tbody>'+(rows||'<tr><td colspan="7" class="empty">Nenhum projeto encontrado.</td></tr>')+'</tbody></table></div></div>';
   el.innerHTML=h;
   el.querySelectorAll('tr[data-p]').forEach(r=>r.onclick=e=>{if(e.target.closest('[data-merge]'))return;openProj(r.dataset.p)});
   el.querySelectorAll('tr[data-pd]').forEach(r=>r.onclick=()=>{const x=PDx(r.dataset.pd);if(x)openProj(x.proj,x.id)});
@@ -1244,6 +1270,7 @@ function pairChart(done){
 const CAD=[
   {k:'clientes',t:'Clientes',f:[['nome','Nome completo','text'],['sigla','Sigla','text',90]],new:()=>({id:uid('c'),nome:'',sigla:'',cor:S.clientes.length%8}),uso:id=>S.emps.some(e=>e.cli===id)||S.projetos.some(p=>p.cli===id)},
   {k:'emps',t:'Empreendimentos',f:[['nome','Nome do empreendimento','text'],['sigla','Sigla','text',80],['cli','Cliente','cli']],new:()=>({id:uid('e'),nome:'',sigla:'',cli:S.clientes[0]?.id||''}),uso:id=>S.projetos.some(p=>p.emp===id)},
+  {k:'etapas',t:'Etapas de entrega',f:[['nome','Etapa','text'],['ord','Ordem','number',70]],new:()=>({id:uid('et'),nome:'',ord:S.etapas.length}),uso:id=>S.tarefas.some(t=>t.etapa===id)},
   {k:'categorias',t:'Tipos de empreendimento',f:[['nome','Tipo','text']],new:()=>({id:uid('cat'),nome:''}),uso:id=>S.projetos.some(p=>p.cat===id)},
   {k:'discs',t:'Disciplinas',f:[['nome','Disciplina','text'],['sigla','Código','text',90]],new:()=>({id:uid('d'),nome:'',sigla:''}),uso:id=>S.pdiscs.some(x=>x.disc===id)},
   {k:'tipos',t:'Tipos de projeto',f:[['nome','Tipo','text']],new:()=>({id:uid('t'),nome:''}),uso:id=>S.projetos.some(p=>p.tipo===id)||S.pdiscs.some(x=>x.tipo===id)},
