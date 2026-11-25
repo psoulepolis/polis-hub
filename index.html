@@ -254,7 +254,7 @@ button.sync{border:none;background:none;padding:0;color:var(--muted)}.sync{font-
 <body>
 
 <header class="top">
-  <div class="brand"><span class="logo" role="img" aria-label="Polis Hub"></span><small>Organização de trabalho · versão R08</small></div>
+  <div class="brand"><span class="logo" role="img" aria-label="Polis Hub"></span><small>Organização de trabalho · versão R09</small></div>
   <div class="who" id="whoBox" hidden><button class="sync" id="syncTag" type="button" aria-live="polite"></button><span class="role" id="roleTag"></span><b id="whoName" style="color:var(--fg)"></b><button class="btn sm" id="btnPasta" type="button">Pasta de dados</button><button class="btn sm" id="btnSenha" type="button">Minha senha</button><button class="btn sm" id="btnSair" type="button">Sair</button></div>
 </header>
 <nav class="tabs" role="tablist" id="tabs"></nav>
@@ -316,8 +316,8 @@ const jstr=r=>JSON.stringify(r,(k,v)=>(k&&k[0]==='_')?undefined:v);
 const hk=h=>h.ts+'|'+h.u+'|'+h.k+'|'+h.txt;
 const idb={
   open(){return new Promise((res,rej)=>{const r=indexedDB.open('polis-hub',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})},
-  async get(k){try{const db=await this.open();return await new Promise(res=>{const q=db.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>res(undefined)})}catch(e){return undefined}},
-  async set(k,v){try{const db=await this.open();return await new Promise(res=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=()=>res(true);tx.onerror=()=>res(false)})}catch(e){return false}}};
+  async get(k){try{const db=await withTO(this.open(),5000);return await new Promise(res=>{const q=db.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>res(undefined)})}catch(e){return undefined}},
+  async set(k,v){try{const db=await withTO(this.open(),5000);return await new Promise(res=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=()=>res(true);tx.onerror=()=>res(false)})}catch(e){return false}}};
 const saveMy=()=>idb.set('my:'+DEVICE,{seq:MYSEQ,events:MY,dirty:MYDIRTY});
 
 // senhas (PBKDF2, no próprio navegador)
@@ -485,13 +485,17 @@ async function refresh(force){
   }
   return ch;
 }
+const withTO=(p,ms)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>{const e=new Error('A pasta demorou demais para responder');e.name='TimeoutError';rej(e)},ms))]);
 async function permissao(h,ask){try{let p=h.queryPermission?await h.queryPermission({mode:'readwrite'}):'granted';if(p!=='granted'&&ask)p=await h.requestPermission({mode:'readwrite'});return p}catch(e){return 'prompt'}}
 async function fsConnect(ask){
   if(FS.busy)return;FS.busy=true;
   try{let perm=false;
-    for(let i=0;i<FS.locs.length;i++){const l=FS.locs[i];const p=await permissao(l.h,ask);
+    for(let i=0;i<FS.locs.length;i++){const l=FS.locs[i];
+      const cm=document.getElementById('connMsg');if(cm)cm.textContent='Tentando “'+l.nome+'”…';
+      let p;try{p=await withTO(permissao(l.h,ask),ask?120000:8000)}catch(e){FS.locStatus[l.id]='off';continue}
       if(p!=='granted'){FS.locStatus[l.id]='perm';perm=true;continue}
-      try{await l.h.getDirectoryHandle('alteracoes',{create:true})}catch(e){FS.locStatus[l.id]='off';continue}
+      try{await withTO(l.h.getDirectoryHandle('alteracoes',{create:true}),10000)}catch(e){FS.locStatus[l.id]='off';continue}
+      if(cm)cm.textContent='Lendo os dados em “'+l.nome+'”…';
       FS.locStatus[l.id]='ok';FS.cur=i;FS.status='ok';
       for(let j=i+1;j<FS.locs.length;j++)delete FS.locStatus[FS.locs[j].id];
       try{await afterConnect()}catch(e){fsFail(e)}
@@ -1535,9 +1539,19 @@ document.getElementById('btnSenha').onclick=()=>{
   FS.locs=(await idb.get('locs'))||[];
   try{rebuild()}catch(e){console.error(e);BASE=null;EVCACHE={};rebuild()}
   if(!FS.locs.length){FS.status='none';return gate()}
+  showConnecting();
   await fsConnect(false);
-  gate();
+  gateOnce();
 })().catch(showFatal);
+let gated=false;
+function gateOnce(){if(gated)return;gated=true;gate()}
+function showConnecting(){
+  authCard('<h3>Conectando à pasta de dados…</h3><p class="muted" id="connMsg" style="margin:6px 0 0">Procurando a pasta do Polis Hub.</p>'+
+    '<div id="connSlow" hidden style="margin-top:12px"><p class="small" style="margin:0 0 10px">A pasta está demorando a responder. Confira a rede do escritório ou se o RaiDrive está conectado.</p><div class="actions"><button class="btn" type="button" id="cPasta">Pasta de dados</button>'+(DATA.users.length?'<button class="btn" type="button" id="cGo">Entrar com os dados deste computador</button>':'')+'</div></div>');
+  setTimeout(()=>{const sl=document.getElementById('connSlow');if(sl&&!gated){sl.hidden=false;
+    document.getElementById('cPasta').onclick=openPasta;
+    const g=document.getElementById('cGo');if(g)g.onclick=()=>{if(FS.status!=='ok')FS.status='offline';gateOnce()}}},6000);
+}
 function showFatal(e){
   console.error(e);
   const msg=(e&&(e.stack||e.message))||String(e);
